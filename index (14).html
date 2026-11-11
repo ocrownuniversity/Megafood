@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MEGA FARMS FOOD MARKET</title>
+<meta name="theme-color" content="#0f1f4b">
+<meta name="mobile-web-app-capable" content="yes">
+<!--
+FIRESTORE RULES (Firebase Console > Firestore > Rules > paste & Publish):
+
+rules_version = '2';
+service cloud.firestore { match /databases/{db}/documents {
+  function U(){ return get(/databases/$(db)/documents/users/$(request.auth.uid)).data; }
+  function ok(){ return request.auth != null && exists(/databases/$(db)/documents/users/$(request.auth.uid)) && U().active == true; }
+  function r(l){ return ok() && U().role in l; }
+  match /config/{c} { allow read: if true;
+    allow create: if request.auth != null && !exists(/databases/$(db)/documents/config/boot); }
+  match /users/{u} {
+    allow read: if request.auth != null && (request.auth.uid == u || r(['admin','manager']));
+    allow create: if request.auth != null && ( (r(['admin']) && request.resource.data.role != 'admin')
+      || (request.auth.uid == u && request.resource.data.role == 'admin' && !exists(/databases/$(db)/documents/config/boot)) );
+    allow update: if r(['admin']) && (request.resource.data.role != 'admin' || resource.data.role == 'admin');
+    allow delete: if false; }
+  match /products/{d} { allow read, create, update: if ok(); allow delete: if false; }
+  match /customers/{d} { allow read, create, update: if ok(); }
+  match /sales/{d} { allow read, create: if ok(); }
+  match /repays/{d} { allow read, create: if ok(); }
+  match /moves/{d} { allow read, create: if ok(); }
+  match /prices/{d} { allow read, create: if ok(); }
+  match /returns/{d} { allow read, create: if ok(); }
+  match /suppliers/{d} { allow read, create, update: if r(['admin','manager','storekeeper']); }
+  match /purchases/{d} { allow read, create: if r(['admin','manager','storekeeper']); }
+  match /spays/{d} { allow read, create: if r(['admin','manager','storekeeper']); }
+  match /expenses/{d} { allow read, create, delete: if r(['admin','manager']); }
+  match /logs/{d} { allow create: if ok(); allow read: if r(['admin','manager']); }
+}}
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-auth-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-firestore-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/htm/3.1.1/htm.umd.min.js"></script>
+<style>:root{--g:#2563eb;--g2:#e8efff;--o:#f59e0b;--bg:#eef2ff;--c:#fff;--t:#0f1f4b;--m:#6b7490;--r:#ef4444;--b:#e2e7f5;--navy:#0f1f4b}
+*{box-sizing:border-box}body{margin:0;font:15px/1.4 Inter,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--t)}
+.top{background:#fff;display:flex;align-items:center;gap:12px;padding:12px 14px;position:sticky;top:0;z-index:5;border-bottom:3px solid #2563eb;border-image:linear-gradient(90deg,#2563eb,#10b981,#7c3aed) 1}
+.top b{font-size:20px;white-space:nowrap}.clk{font:12px ui-monospace,Menlo,monospace;color:var(--m);flex:1;white-space:nowrap;overflow:hidden}
+.ham{border:0;background:none;font-size:26px;color:var(--t);padding:0}.bell{position:relative;border:0;background:none;font-size:22px;padding:0}.bell i{position:absolute;top:-4px;right:-6px;background:#ef4444;color:#fff;border-radius:10px;font:700 10px system-ui;padding:1px 5px}
+.av{width:38px;height:38px;border-radius:10px;background:#f59e0b;color:#1a1200;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+.side{position:fixed;inset:0 auto 0 0;width:min(310px,82vw);background:var(--navy);color:#cbd5f5;z-index:30;overflow:auto;padding:16px 14px;transform:translateX(-100%);transition:transform .2s}.side.on{transform:none}
+.ov{position:fixed;inset:0;background:#0008;z-index:29}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;font-weight:800;font-size:18px;margin-bottom:10px}.brand img,.brand span{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:flex;align-items:center;justify-content:center;object-fit:cover;font-size:22px;flex:none}.brand small{display:block;color:#7f8fc4;font-weight:500;font-size:12px}
+.side h6{margin:16px 6px 6px;color:#6f7fb0;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.it{display:flex;width:100%;align-items:center;gap:12px;border:0;background:none;color:#aab6df;padding:13px 12px;border-radius:12px;font-size:17px;font-weight:500;text-align:left;cursor:pointer}.it.on{background:var(--g);color:#fff;box-shadow:0 6px 16px #2563eb66}
+.it.ins{background:linear-gradient(90deg,#2563eb,#16255e);color:#fff;font-weight:700;margin:8px 0}.bdg{margin-left:auto;background:#ef4444;color:#fff;border-radius:12px;padding:1px 9px;font-size:13px;font-weight:700}
+main{padding:14px;max-width:1200px;margin:auto}h2{font-size:26px}
+.card{background:var(--c);border:1px solid var(--b);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px #1e3a8a12}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px;margin-bottom:14px}
+.k{display:flex;gap:12px;align-items:center;background:var(--c);border:1px solid var(--b);border-radius:16px;padding:14px;box-shadow:0 2px 10px #1e3a8a12}.k i{font-style:normal;width:48px;height:48px;border-radius:12px;background:#eaf1ff;display:flex;align-items:center;justify-content:center;font-size:24px;flex:none}
+.k span{display:block;color:var(--m);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}.k b{font-size:22px}.k.w i{background:#fff4dc}.k.d{border-left:4px solid var(--r)}.k.d i{background:#fdeaea}.k.ok i{background:#e3f8ec}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--b);border-radius:10px;background:#fff;color:var(--t);font:inherit}
+label{display:block;font-size:12px;color:var(--m);margin-bottom:8px}
+button.p,button.s,button.d2{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit;font-weight:600}
+button.p{background:var(--g);color:#fff;box-shadow:0 6px 14px #2563eb44}button.s{background:#fff;color:var(--t);border:1px solid var(--b)}button.d2{background:#ef4444;color:#fff}button:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px}.row>*{flex:1;min-width:120px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid var(--b);text-align:left;white-space:nowrap}th{color:var(--m);font-weight:700;font-size:11px;text-transform:uppercase;background:#f6f8ff}
+.modal{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:12px;z-index:40}
+.box{background:#fff;border-radius:16px;padding:16px;width:100%;max-width:720px}.mh{display:flex;justify-content:space-between;margin-bottom:10px}.x{border:0;background:none;font-size:18px;color:var(--t)}
+.tag{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;background:#e3f8ec;color:#0a8f4a}.tag.r{background:#fdeaea;color:var(--r)}.tag.o{background:#fff1d6;color:#b86e00}.tag.v{background:#ece8ff;color:#5b3fd0}
+.err{color:var(--r);margin:8px 0}.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:760px){.two{grid-template-columns:1fr}}
+.pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}.pc{background:#fff;border-radius:16px;border-left:5px solid #16a34a;box-shadow:0 2px 12px #1e3a8a18;overflow:hidden}.pc.low{border-left-color:var(--o)}.pc.out{border-left-color:var(--r)}
+.pi{height:120px;background:linear-gradient(135deg,#eef2ff,#e8e2ff);display:flex;align-items:center;justify-content:center;font-size:48px;position:relative}.pi img{width:100%;height:100%;object-fit:cover}.pi .tag{position:absolute;top:10px;right:10px}
+.pb{padding:12px 14px}.cat{color:var(--g);font-weight:700;font-size:12px;text-transform:uppercase}.pr{font:700 22px ui-monospace,Menlo,monospace;color:#0a8f4a}
+.banner{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#1e3a8a,#16255e);color:#fff;border-radius:14px;padding:14px 18px;margin:10px 0}
+.day{border-radius:14px;overflow:hidden;background:#fff;margin-bottom:12px;box-shadow:0 2px 10px #1e3a8a12}.dh{display:flex;justify-content:space-between;background:#1e3a8a;color:#fff;padding:9px 12px;font-weight:700;font-size:13px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.chips button{border:0;background:#e3e9fb;color:var(--m);padding:9px 14px;border-radius:10px;font-weight:600;cursor:pointer}.chips button.on{background:#fff;color:var(--g);box-shadow:0 2px 6px #1e3a8a22}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:10px}.tile{border-radius:12px;padding:12px;text-align:center;background:#eef3ff;color:var(--g)}.tile small{display:block;font-weight:700;font-size:11px;text-transform:uppercase;color:inherit}.tile b{font:700 18px ui-monospace,Menlo,monospace}
+.tile.g{background:#e6f8ee;color:#0a8f4a}.tile.r{background:#fdecec;color:#d62d2d}.tile.v{background:#f0eaff;color:#7c3aed}.tile.y{background:#fff7dc;color:#c27a00}.tile.n{background:#f1f4fb;color:#0f1f4b}
+.lrow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--b)}
+.mb{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.mb button{flex:1;min-width:90px;border:2px solid var(--b);background:var(--c);color:var(--t);padding:11px;border-radius:10px;font-weight:600;cursor:pointer}.mb button.on{border-color:var(--g);background:#eaf1ff;color:var(--g)}
+.addbox{background:#eaf0ff;border-radius:12px;padding:12px;margin:12px 0}button.ok{border:0;border-radius:10px;padding:12px 18px;background:#10b981;color:#fff;font:700 16px system-ui;cursor:pointer}
+.sf{margin-top:24px;border-top:1px solid #243054;padding-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:#fff}.sf small{display:block;color:#8e9bc4}.sf .btns{display:flex;gap:8px;width:100%}.sf .btns button{flex:1;border:1px solid #2b3a6b;background:#16255e;color:#cbd5f5;border-radius:10px;padding:9px}
+@media(min-width:900px){.side{transform:none;width:260px}.ham,.ov{display:none}body{padding-left:260px}}
+[data-theme=dark]{--bg:#0b1226;--c:#131c36;--t:#e6ebff;--m:#8e9bc4;--b:#243054}[data-theme=dark] .top,[data-theme=dark] .box,[data-theme=dark] .pc,[data-theme=dark] .day,[data-theme=dark] input,[data-theme=dark] select,[data-theme=dark] button.s{background:var(--c);color:var(--t)}[data-theme=dark] th{background:var(--bg)}[data-theme=dark] .chips button.on,[data-theme=dark] .addbox,[data-theme=dark] .mb button.on{background:#1b2750}[data-theme=dark] .tile.n{background:#1b2750;color:#e6ebff}
+.rc{font-family:monospace;font-size:13px;color:#000;background:#fff;padding:12px}.rc hr{border:0;border-top:1px dashed #000}.rc .l{display:flex;justify-content:space-between}
+@media print{body *{visibility:hidden}.rc,.rc *{visibility:visible}.rc{position:absolute;left:0;top:0;width:100%}}
+.lg{min-height:100vh;background:linear-gradient(170deg,#1e3a8a,#1b2455 70%,#171d44);display:flex;align-items:center;justify-content:center;padding:20px}
+.lc{background:#f8f9fb;border-radius:28px;padding:28px 22px;width:100%;max-width:420px;color:#111a3a;text-align:center;box-shadow:0 20px 50px #0006}
+.lc h2{margin:14px 0 2px;font-size:26px}.lc p{margin:0 0 14px;color:#5b6478}
+.lc .tabs{display:flex;background:#eef0f4;border-radius:14px;padding:4px;margin:16px 0}.lc .tabs button{flex:1;border:0;background:none;padding:12px;border-radius:11px;font:600 16px system-ui;color:#5b6478}.lc .tabs button.on{background:#fff;color:#2563eb;box-shadow:0 2px 6px #0002}
+.lc label{text-align:left;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#5b6478;font-size:12px;margin:12px 0 6px}
+.lc input{background:#fff;color:#111a3a;border:1px solid #e2e5ee;border-radius:12px;padding:15px;font-size:16px}
+.lc .go{width:100%;border:0;border-radius:12px;padding:16px;margin-top:16px;color:#fff;font:700 18px system-ui;background:linear-gradient(90deg,#2563eb,#1d4ed8);box-shadow:0 8px 18px #2563eb55}
+.lc .ins{display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(90deg,#1e3a8a,#2563eb);color:#fff;border-radius:14px;padding:14px;margin-top:14px;text-align:left}.lc .ins small{display:block;opacity:.85}.lc .ins button{border:0;border-radius:10px;padding:10px 14px;background:#ffffff33;color:#fff;font-weight:700}
+.lc .ft{margin-top:14px;color:#8a93a6;font-size:14px}.lc .ft b{color:#2563eb}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#34d399;margin-right:6px}
+
+/* ===== UI v2 ===== */
+h2{font-size:20px}
+.top{padding:10px 16px}.top b{font-size:13px}.clk{text-align:right;font-size:11px}
+.side{display:flex;flex-direction:column;padding:14px 10px}.side h6{font-size:9px;margin:14px 8px 4px;letter-spacing:1.2px}
+.brand{font-size:15px;margin-bottom:12px}.brand span,.brand img{width:34px;height:34px;border-radius:10px;font-size:18px}.brand b{font-size:13px;line-height:1.2}.brand em{color:#60a5fa;font-style:normal}
+.biz{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid #33457f;background:#16255e;border-radius:8px;padding:7px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#fbbf24}.biz span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.biz button{border:0;background:none;color:#7fb0ff;font-size:10px;cursor:pointer;padding:0;white-space:nowrap}
+.it{font-size:13px;padding:9px 11px;border-radius:9px;gap:10px}.it svg{width:15px;height:15px;flex:none}.it.ins{font-size:12px;margin:6px 8px;width:auto;padding:9px 12px}.bdg{font-size:10px;padding:1px 7px}
+.sf{margin-top:auto;padding-top:12px}.sf small{text-transform:capitalize}.sf .btns button{font-size:11px;padding:7px}
+.k b{font:700 19px ui-monospace,Menlo,monospace}.k.ok{border-left:4px solid #10b981}.k.w{border-left:4px solid var(--o)}.k.x i{background:#fdeaea}.k.x b{color:var(--r)}
+.chips{display:inline-flex;gap:2px;background:#e3e9fb;padding:4px;border-radius:12px;flex-wrap:wrap}.chips button{background:none;padding:7px 13px;font-size:13px;border-radius:9px}.chips button.on{background:#fff}
+.fl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.fl select{width:auto;min-width:150px}
+.tiles{grid-template-columns:repeat(4,1fr)}@media(max-width:600px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile small{font-size:10px;letter-spacing:.3px}.tile .ic{display:block;font-size:20px;margin-bottom:2px}
+.tile.b{background:#eaf0ff;color:#0f1f4b}.tile.bl{background:#eaf0ff;color:#2563eb}.tile.b2{background:#eaf0ff;color:#2563eb}.tile.b2 b{color:#0a8f4a}
+th,td{padding:10px 12px}.emp{text-align:center;color:var(--m);padding:30px}
+.modal{align-items:flex-start}.box{padding:0;overflow:hidden;margin:auto;max-width:560px}.box .mh{padding:14px 18px;margin:0;border-bottom:1px solid var(--b);align-items:center;font-size:15px}.bd{padding:16px 18px}
+.bd label{text-transform:uppercase;font-weight:700;letter-spacing:.4px;font-size:11px}.rc{text-transform:none}
+.pf{display:flex;justify-content:flex-end;align-items:center;gap:8px;border-top:1px solid var(--b);padding-top:14px;margin-top:14px;flex-wrap:wrap}.pf button{flex:0;white-space:nowrap}
+.ar>*{min-width:60px}.ar>.pw{flex:3;min-width:120px}.ar>button{flex:0}
+.ib,.ib2{border:0;cursor:pointer;border-radius:8px}.ib{background:#ef4444;color:#fff;padding:6px 10px}.ib2{background:none;font-size:15px;padding:4px 6px}
+.bn{display:flex;flex-direction:column;align-items:flex-end;font-size:14px}.bn small{font-size:9px;letter-spacing:1px;opacity:.7}.bn .gr{color:#34d399}
+[data-theme=dark] .chips{background:#1b2750}[data-theme=dark] .chips button.on{background:#2a3a73}[data-theme=dark] .tile.b,[data-theme=dark] .tile.bl,[data-theme=dark] .tile.b2{background:#1b2750}[data-theme=dark] .tile.b{color:#e6ebff}
+
+/* ===== v3 ===== */
+.box{overflow:visible}
+.dd{position:absolute;left:0;right:0;top:calc(100% - 6px);z-index:60;max-height:270px;overflow:auto;background:var(--c);border:2px solid #2563eb;border-top:0;border-radius:0 0 12px 12px;box-shadow:0 12px 26px #0003}
+.di{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--b);cursor:pointer;text-transform:none}.di b{font-size:15px;color:var(--t)}.di small{display:block;color:var(--m);font-weight:400;font-size:13px}.di small.z{color:var(--r)}.di .pr2{font:700 15px ui-monospace,Menlo,monospace;color:#0a8f4a;white-space:nowrap}
+.rc2{border:1px dashed #cbd3e6;border-radius:14px;padding:20px 18px;background:#fff;color:#0f1f4b;font:13px ui-monospace,Menlo,monospace}.rc2 hr{border:0;border-top:1px dashed #cbd3e6;margin:12px 0}
+.rh{margin:0 0 4px;text-align:center;font:800 21px Inter,system-ui,sans-serif}.ra{text-align:center;color:#7a849e;font-size:13px}.rh2{font-size:11px;letter-spacing:1px;color:#98a1b8}
+.rr{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:14px}.rr span{color:#7a849e}.rr b{font-weight:500;color:#0f1f4b;text-align:right}
+.ri>b{font:700 16px Inter,system-ui,sans-serif}.rt{display:flex;justify-content:space-between;font:800 19px ui-monospace,Menlo,monospace}.rb{text-align:center;margin-top:6px}.rb rect{fill:#000}
+.brand svg{width:34px;height:34px;flex:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ============ 1. PASTE YOUR FIREBASE WEB CONFIG HERE (Project settings > Your apps > Web) ============ */
+const FB={apiKey:"AIzaSyAW606_4tcIJcovZa-bAI30mSI_W6aHiYA",authDomain:"ocrown-restaurant.firebaseapp.com",projectId:"ocrown-restaurant",storageBucket:"ocrown-restaurant.firebasestorage.app",messagingSenderId:"312914911792",appId:"1:312914911792:web:98a5fdbe60f7ea739bc3f5"};
+const BRAND="MEGA FARMS FOOD MARKET";
+let CFG={name:"MEGA FARMS FOOD MARKET",phone:"",email:"",address:"",footer:"Thank you for shopping with us!",logo:""};
+/* ================================================================================================== */
+firebase.initializeApp(FB);const auth=firebase.auth(),db=firebase.firestore();db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+/* installable-app manifest (best effort) */
+(()=>{try{const ic="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#16a34a"/><path d="M256 90C190 95 185 165 256 195 327 165 322 95 256 90Z" fill="#bbf7d0"/><path d="M160 270C160 160 352 160 352 270" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round"/><path d="M110 270H402L370 410H142Z" fill="#fff"/></svg>');const m={name:BRAND,short_name:"Mega Farms",display:"standalone",background_color:"#0f1f4b",theme_color:"#0f1f4b",start_url:location.href.split("#")[0],icons:[{src:ic,sizes:"512x512",type:"image/svg+xml"}]};const l=document.createElement("link");l.rel="manifest";l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:"application/manifest+json"}));document.head.appendChild(l);const f=document.createElement("link");f.rel="icon";f.href=ic;document.head.appendChild(f)}catch(e){}})();
+const {useState,useEffect}=React;
+const pS=s=>typeof s=="string"?Object.fromEntries(s.split(";").filter(x=>x.includes(":")).map(x=>{const i=x.indexOf(":");return[x.slice(0,i).trim().replace(/-([a-z])/g,(m,c)=>c.toUpperCase()),x.slice(i+1).trim()]})):s;
+const fx=p=>{if(!p)return p;const o={...p};if("class"in o){o.className=o.class;delete o.class}if("colspan"in o){o.colSpan=o.colspan;delete o.colspan}if(typeof o.style=="string")o.style=pS(o.style);return o};
+const h=htm.bind((t,p,...c)=>React.createElement(t,fx(p),...c));
+class EB extends React.Component{constructor(p){super(p);this.state={e:null}}static getDerivedStateFromError(e){return{e}}render(){return this.state.e?React.createElement("pre",{style:{padding:14,whiteSpace:"pre-wrap",color:"#c0392b"}},"Error: "+this.state.e.message):this.props.children}}
+let ME=null;
+const N=v=>"₦"+(+v||0).toFixed(2),dt=t=>t?new Date(t).toLocaleString():"-",dd=t=>t?new Date(t).toLocaleDateString():"-",ds=t=>t?new Date(t).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"-";
+const uid=()=>Math.random().toString(36).slice(2,10),sum=(a,f)=>a.reduce((t,x)=>t+(+f(x)||0),0);
+const sha=async s=>[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode("mf|"+s)))].map(b=>b.toString(16).padStart(2,"0")).join("");
+const log=(a,t)=>db.collection("logs").add({a,t:t||"",by:ME?.name||"?",uid:ME?.id||"",ts:Date.now()}).catch(()=>{});
+const run=async f=>{try{await f();return true}catch(e){alert(e.message);return false}};
+const qtyOf=b=>sum(b||[],x=>x.qty),stockVal=p=>sum(p.batches||[],b=>b.qty*b.cost);
+const take=(bs,q)=>{bs=[...(bs||[])].sort((a,b)=>a.date-b.date).map(b=>({...b}));let c=0,n=q;for(const b of bs){if(n<=0)break;const t=Math.min(b.qty,n);b.qty-=t;n-=t;c+=t*b.cost}return n>0?null:{bs:bs.filter(b=>b.qty>0),cost:c}};
+const mvDoc=o=>db.collection("moves").doc();
+/* Image compressor: resizes + re-encodes to JPEG until under ~150 KB, stored inside the Firestore product document (limit 1 MB) */
+const squeeze=f=>new Promise((res,rej)=>{const r=new FileReader();r.onerror=()=>rej(Error("Cannot read image"));r.onload=()=>{const i=new Image();i.onerror=()=>rej(Error("Not a valid image"));i.onload=()=>{let w=640,q=.8,u;for(let n=0;n<10;n++){const s=Math.min(1,w/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(i,0,0,c.width,c.height);u=c.toDataURL("image/jpeg",q);if(u.length<150000)break;q=Math.max(.4,q-.1);w*=.85}res(u)};i.src=r.result};r.readAsDataURL(f)});
+const csv=(n,rows)=>{const s=rows.map(r=>r.map(c=>'"'+String(c??"").replace(/"/g,'""')+'"').join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([s],{type:"text/csv"}));a.download=n+".csv";a.click()};
+const PAGES={dash:"Dashboard",products:"Products",sales:"Sales",pos:"New Sale",reports:"Reports",customers:"Customers",credits:"Credit Payments",alerts:"Alerts",returns:"Returns",stock:"Stock",purchases:"Supply",suppliers:"Suppliers",expenses:"Expenses",staff:"Staff",logs:"Activity Log",settings:"Settings"};
+const ICP={dash:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',products:'<path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>',sales:'<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',reports:'<path d="M18 20V10M12 20V4M6 20v-6"/>',customers:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',alerts:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',returns:'<path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/>',expenses:'<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',credits:'<rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/>',staff:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',settings:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',stock:'<path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',purchases:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',suppliers:'<rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',logs:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8"/>'};
+const Ic=k=>React.createElement("svg",{viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",dangerouslySetInnerHTML:{__html:ICP[k]||""}});
+const GR=[["Main",["dash","products","sales"]],["Inventory",["purchases","stock","suppliers"]],["Analytics",["reports","customers","alerts","returns","expenses","@install","credits"]],["Admin",["staff","settings","logs"]]];
+const RP={admin:Object.keys(PAGES),manager:["dash","products","sales","reports","customers","credits","alerts","returns","stock","purchases","suppliers","expenses"],cashier:["sales","products","customers","credits","returns"],storekeeper:["stock","products","purchases","alerts"]};
+const COLS=["products","customers","suppliers","sales","purchases","expenses","moves","repays","spays","logs","users","prices","returns"];
+
+/* ---- UI helpers ---- */
+const T=({c,r,e})=>h`<div class="tw"><table><thead><tr>${c.map(x=>h`<th>${x}</th>`)}</tr></thead><tbody>${r.length?r.map(w=>h`<tr>${w.map(x=>h`<td>${x}</td>`)}</tr>`):h`<tr><td colspan=${c.length} class="emp">${e||"No records yet"}</td></tr>`}</tbody></table></div>`;
+const Modal=({t,x,w,children})=>h`<div class="modal"><div class=${"box "+(w||"")}><div class="mh"><b>${t}</b><button class="x" onClick=${x}>✕</button></div><div class="bd">${children}</div></div></div>`;
+const I=(n,l,p={})=>h`<label>${l}<input name=${n} ...${p}/></label>`;
+const K=({l,v,c,i})=>h`<div class=${"k "+(c||"")}>${i&&h`<i>${i}</i>`}<div><span>${l}</span><b>${v}</b></div></div>`;
+const frm=e=>{e.preventDefault();return Object.fromEntries(new FormData(e.target))};
+
+/* ---- Receipt ---- */
+function Receipt({r,x}){const sale=!!r.lines,M=[["cash","Cash"],["transfer","Transfer"],["pos","Card"]].filter(([k])=>r.pay[k]>0).map(a=>a[1].toUpperCase());if(sale&&r.credit>0)M.push("CREDIT");
+ const txt=[CFG.name,`Receipt #${r.ref}`,ds(r.ts),`Cashier: ${r.by}`,r.cust?`Customer: ${r.cust}`:"",...(sale?r.lines.map(l=>`${l.name} ${l.qty} x ${N(l.price)} = ${N(l.qty*l.price)}`):[`Debt repayment`]),sale?`Total: ${N(r.total)}`:`Paid: ${N(r.amount)}`,sale?`Outstanding: ${N(r.credit)}`:`Balance left: ${N(r.balance)}`,CFG.footer||""].filter(Boolean).join("\n");
+ const L=(a,b)=>h`<div class="rr"><span>${a}</span><b>${b}</b></div>`;let xx=0;const rects=[];[...(r.ref+r.ref+r.ref)].forEach((c,i)=>{const n=c.charCodeAt(0),w=(1+n%3)*1.6,g=(1+(n>>1)%3)*1.6;rects.push(h`<rect x=${xx} y="0" width=${w} height="40"/>`);xx+=w+g});
+ return h`<${Modal} t="🧾 Receipt" x=${x}><div class="rc rc2"><h3 class="rh">${CFG.name}</h3><div class="ra">${[CFG.address,CFG.phone].filter(Boolean).join(" | ")}</div><div class="ra">Receipt #${r.ref}</div><hr/>
+ ${sale?h`<div class="rr rh2"><span>ITEM</span><span>AMOUNT</span></div>${r.lines.map(l=>h`<div class="ri"><b>${l.name}</b><div class="rr"><span>${l.qty} × ${N(l.price)}</span><b>${N(l.qty*l.price)}</b></div></div>`)}`:h`<div class="rr rh2"><span>DEBT REPAYMENT</span><span>AMOUNT</span></div><div class="ri"><b>${r.cust}</b><div class="rr"><span>Payment received</span><b>${N(r.amount)}</b></div></div>`}<hr/>
+ ${sale&&r.disc>0&&h`<div class="rr"><span>Subtotal</span><b>${N(r.sub)}</b></div><div class="rr"><span>Discount</span><b>${N(r.disc)}</b></div>`}
+ <div class="rt"><span>${sale?"TOTAL":"PAID"}</span><span>${N(sale?r.total:r.amount)}</span></div><hr/>
+ ${L("Payment",M.join(" + ")||"-")}${sale&&r.credit>0&&L("Paid",N(r.paid))}${sale&&r.credit>0&&L("Owing",N(r.credit))}${!sale&&L("Balance left",N(r.balance))}${sale&&L("Items",r.lines.length+(r.lines.length>1?" products":" product"))}${sale&&r.cust&&L("Customer",r.cust)}${L("Cashier",r.by)}${L("Date",ds(r.ts))}
+ <hr/><div class="rb"><svg viewBox=${"0 0 "+xx+" 40"} width="170" height="40" preserveAspectRatio="none">${rects}</svg></div><div class="ra" style="margin-top:8px">${CFG.footer||"Thank you for your purchase!"}</div><div class="ra">${CFG.name}</div></div>
+ <div class="row" style="margin-top:12px"><button class="p" onClick=${()=>window.print()}>Print</button>${navigator.share&&h`<button class="s" onClick=${()=>navigator.share({text:txt})}>Share</button>`}</div><//>`}
+
+/* ---- Data / calc ---- */
+function useData(on){const [d,setD]=useState({});useEffect(()=>{if(!on)return;const us=COLS.map(c=>db.collection(c).onSnapshot(s=>setD(p=>({...p,[c]:s.docs.map(x=>({id:x.id,...x.data()}))})),()=>{}));return()=>us.forEach(f=>f())},[on]);return d}
+const rangeOf=(k,a,b)=>{const d=new Date();d.setHours(0,0,0,0);let s=d.getTime(),e=s+864e5;
+ if(k=="week"){s-=((d.getDay()+6)%7)*864e5;e=s+7*864e5}
+ if(k=="month"){s=new Date(d.getFullYear(),d.getMonth(),1).getTime();e=new Date(d.getFullYear(),d.getMonth()+1,1).getTime()}
+ if(k=="custom"&&a&&b){s=new Date(a+"T00:00").getTime();e=new Date(b+"T00:00").getTime()+864e5}if(k=="yest"){e=s;s-=864e5}if(k=="all"){s=0;e=9e15}return[s,e]};
+function calc(d,[s,e]){const f=k=>(d[k]||[]).filter(x=>x.ts>=s&&x.ts<e);const S=f("sales"),R=f("repays"),P=f("purchases"),E=f("expenses"),M=f("moves"),RT=f("returns");
+ const m=k=>sum(S,x=>x.pay[k])+sum(R,x=>x.pay[k])-sum(RT,x=>x.method==k?x.amount:0);const rev=sum(S,x=>x.total)-sum(RT,x=>x.amount),cogs=sum(S,x=>x.cogs)-sum(RT,x=>x.cost),exp=sum(E,x=>x.amount),loss=sum(M,x=>x.lossValue);
+ return{S,R,P,E,M,RT,rev,cogs,gp:rev-cogs,exp,loss,net:rev-cogs-exp-loss,cash:m("cash"),transfer:m("transfer"),pos:m("pos"),credit:sum(S,x=>x.credit)-sum(RT,x=>x.method=="credit"?x.amount:0),repaid:sum(R,x=>x.amount),purch:sum(P,x=>x.total)}}
+function RangeBar({rg,set}){const KS=[["day","Today"],["yest","Yesterday"],["week","This Week"],["month","This Month"],["all","All Time"],["custom","Custom Range"]];
+ return h`<div><div class="chips">${KS.map(([k,l])=>h`<button class=${rg.k==k?"on":""} onClick=${()=>set({...rg,k})}>${l}</button>`)}</div>${rg.k=="custom"&&h`<div class="row"><label>From<input type="date" value=${rg.a} onChange=${e=>set({...rg,a:e.target.value})}/></label><label>To<input type="date" value=${rg.b} onChange=${e=>set({...rg,b:e.target.value})}/></label></div>`}</div>`}
+
+/* ---- Dashboard ---- */
+const alertsOf=d=>{const P=(d.products||[]).filter(p=>!p.arch),now=Date.now();return{low:P.filter(p=>p.qty<=p.min),out:P.filter(p=>p.qty<=0),exp:P.flatMap(p=>(p.batches||[]).filter(b=>b.exp&&b.exp<now+30*864e5).map(b=>[p.name,b.qty,dd(b.exp),b.exp<now?h`<span class="tag r">Expired</span>`:h`<span class="tag o">Soon</span>`]))}};
+function Dash({d,rg,go}){const c=calc(d,rangeOf(rg.k,rg.a,rg.b)),P=(d.products||[]).filter(p=>!p.arch),{low,out,exp}=alertsOf(d);
+ const hr=new Date().getHours(),gr=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening",t0=new Date().setHours(0,0,0,0);
+ const days=[...Array(7)].map((_,i)=>{const st=t0-(6-i)*864e5;return{l:new Date(st).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}),v:sum((d.sales||[]).filter(x=>x.ts>=st&&x.ts<st+864e5),x=>x.total)}});
+ const mx=Math.max(...days.map(x=>x.v),1),pts=days.map((x,i)=>[60+i*(520/6),190-(x.v/mx)*150]),line=pts.map(p=>p.join(",")).join(" ");
+ return h`<${React.Fragment}><h2 style="margin:4px 0">${gr}, ${ME.name} 👋</h2><div style="color:var(--m);margin-bottom:10px">${new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+ <div class="row" style="align-items:center"><button class="s" style="flex:0;white-space:nowrap" onClick=${()=>location.reload()}>🔄 Refresh</button><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>go("pos")}>+ New Sale</button></div>
+ <div class="grid"><${K} i="📦" l="Products" v=${P.length}/><${K} i="💳" c="ok" l="Sales (period)" v=${c.S.length}/><${K} i="💰" l="Total sales" v=${N(c.rev)}/><${K} i="⚠️" c="d" l="Low / out of stock" v=${low.length}/>
+ <${K} i="✅" c="ok" l="Money collected" v=${N(c.cash+c.transfer+c.pos)}/><${K} i="🧾" c="w" l="Credit sales" v=${N(c.credit)}/><${K} i="🧑" c="d" l="Customer debts" v=${N(sum(d.customers||[],x=>x.debt))}/><${K} i="🚚" c="w" l="Supplier debts" v=${N(sum(d.suppliers||[],x=>x.balance))}/>
+ <${K} i="🛍️" l="Purchases" v=${N(c.purch)}/><${K} i="💸" l="Expenses" v=${N(c.exp)}/><${K} i="📈" c="ok" l="Gross profit" v=${N(c.gp)}/><${K} i="🏆" c="ok" l="Net profit" v=${N(c.net)}/>
+ <${K} i="🗃️" l="Total stock qty" v=${sum(P,p=>p.qty)}/><${K} i="🗑️" c="d" l="Damaged / spoiled loss" v=${N(c.loss)}/></div>
+ <div class="card"><b>📈 Revenue – Last 7 Days</b><svg viewBox="0 0 600 230" style="width:100%">${[0,.5,1].map(f=>h`<g><line x1="55" x2="590" y1=${190-f*150} y2=${190-f*150} stroke="#e2e7f5"/><text x="2" y=${194-f*150} font-size="11" fill="#94a0c0">${N(Math.round(mx*f))}</text></g>`)}
+ <polygon points=${line+" 580,190 60,190"} fill="#2563eb" fill-opacity=".1"/><polyline points=${line} fill="none" stroke="#2563eb" stroke-width="3"/>${pts.map((p,i)=>h`<g><circle cx=${p[0]} cy=${p[1]} r="4.5" fill="#2563eb"/><text x=${p[0]} y="215" font-size="11" text-anchor="middle" fill="#94a0c0">${days[i].l}</text></g>`)}</svg></div>
+ <div class="two"><div class="card"><b>⚠️ Low stock</b><${T} c=${["Product","Qty","Min"]} r=${low.slice(0,10).map(p=>[p.name,p.qty,p.min])}/><button class="s" onClick=${()=>go("alerts")}>View all</button></div><div class="card"><b>⏳ Expiring / expired (30 days)</b><${T} c=${["Product","Qty","Expiry","Status"]} r=${exp}/></div>
+ <div class="card"><b>Recent sales</b><${T} c=${["Ref","Total","Credit","By"]} r=${[...c.S].sort((a,b)=>b.ts-a.ts).slice(0,8).map(s=>[s.ref,N(s.total),N(s.credit),s.by])}/></div>
+ <div class="card"><b>Recent stock movements</b><${T} c=${["Product","Type","Change","By"]} r=${[...(d.moves||[])].sort((a,b)=>b.ts-a.ts).slice(0,8).map(m=>[m.name,m.type,m.chg,m.by])}/></div></div><//>`}
+
+const inR=(t,k)=>{const[a,b]=rangeOf(k);return t>=a&&t<b};
+/* ---- Sales history ---- */
+const payLbl=s=>{const k=[["cash","Cash"],["transfer","Transfer"],["pos","Card"]].filter(([x])=>s.pay[x]>0).map(x=>x[1]);if(s.credit>0)k.push("Credit");return!k.length?"-":k.length==1?k[0]:"Split: "+k.join("+")};
+function Sales({d,go}){const [q,setQ]=useState(""),[pf,setPf]=useState(""),[pd,setPd]=useState("all"),[rc,setRc]=useState(null);
+ const L=(d.sales||[]).filter(s=>(s.lines.map(l=>l.name).join(" ")+(s.cust||"")+s.by+s.ref).toLowerCase().includes(q.toLowerCase())&&(!pf||payLbl(s).toLowerCase().includes(pf))&&inR(s.ts,pd)).sort((a,b)=>b.ts-a.ts);
+ const days={};L.forEach(s=>{const k=new Date(s.ts).toDateString();(days[k]=days[k]||[]).push(s)});const tot=sum(L,s=>s.total);
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><div><h2 style="margin:0">Sales</h2><small>${L.length} transactions · ${N(tot)}</small></div><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>go("pos")}>+ Record Sale</button></div>
+ <div class="row"><input placeholder="Search product, customer, cashier…" value=${q} onInput=${e=>setQ(e.target.value)}/><select value=${pf} onChange=${e=>setPf(e.target.value)}><option value="">All Payments</option><option value="cash">Cash</option><option value="transfer">Transfer</option><option value="card">Card</option><option value="credit">Credit</option></select><select value=${pd} onChange=${e=>setPd(e.target.value)}><option value="all">All Time</option><option value="day">Today</option><option value="week">This Week</option><option value="month">This Month</option></select></div>
+ <div class="banner"><b>All Sales</b><span style="display:flex;gap:24px"><span class="bn"><small>SALES</small><b>${L.length}</b></span><span class="bn"><small>REVENUE</small><b class="gr">${N(tot)}</b></span></span></div>
+ ${Object.entries(days).map(([k,a])=>h`<div class="day"><div class="dh"><span>📅 ${new Date(k).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</span><span>${a.length} sales · ${N(sum(a,s=>s.total))}</span></div>
+ <${T} c=${["ID","Product(s)","Qty","Total","Payment","Customer","Cashier","Time","Actions"]} r=${a.map((s,i)=>[i+1,h`<b style="display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom">${s.lines.map(l=>l.name).join(", ")}</b>`,sum(s.lines,l=>l.qty),h`<b style="color:#0a8f4a">${N(s.total)}</b>`,h`<span class=${"tag "+(s.credit>0&&s.paid==0?"o":payLbl(s).startsWith("Split")?"v":"")}>${payLbl(s).toUpperCase()}</span>`,s.cust||"—",s.by,new Date(s.ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),h`<span style="white-space:nowrap"><button class="ib2" title="Receipt" onClick=${()=>setRc(s)}>🧾</button><button class="ib2" title="Return" onClick=${()=>go("returns")}>↩️</button></span>`])}/></div>`)}
+ ${!L.length&&h`<div class="card">No sales yet. Tap “Record Sale” to make the first one.</div>`}${rc&&h`<${Receipt} r=${rc} x=${()=>setRc(null)}/>`}<//>`}
+
+/* ---- Alerts ---- */
+function Alerts({d}){const {low,out,exp}=alertsOf(d);return h`<${React.Fragment}><h2 style="margin:4px 0">Alerts</h2><div class="card"><b>Out of stock (${out.length})</b><${T} c=${["Product"]} r=${out.map(p=>[p.name])}/></div><div class="card"><b>Low stock (${low.length})</b><${T} c=${["Product","Qty","Alert at"]} r=${low.map(p=>[p.name,p.qty,p.min])}/></div><div class="card"><b>Expiring / expired</b><${T} c=${["Product","Qty","Expiry","Status"]} r=${exp}/></div><//>`}
+
+/* ---- Settings ---- */
+function Settings(){const [im,setIm]=useState(CFG.logo||"");
+ const sv=async e=>{const f=frm(e);await db.doc("config/biz").set({name:f.name,phone:f.phone,email:f.email,address:f.address,footer:f.footer,logo:im},{merge:true});log("Settings updated");alert("Saved")};
+ const pin=async()=>{const p=prompt("New Super Admin PIN (4+ digits):");if(p&&p.length>=4){await db.collection("users").doc(ME.id).update({pinHash:await sha(p)});log("PIN changed");alert("PIN changed")}};
+ return h`<div class="card"><h3 style="margin-top:0">Company settings</h3><p style="color:var(--m)">These details appear on every receipt and on the login screen.</p>
+ <form onSubmit=${e=>run(()=>sv(e))}>${I("name","Business name",{required:1,defaultValue:CFG.name})}${I("phone","Phone number",{defaultValue:CFG.phone,type:"tel"})}${I("email","Email",{defaultValue:CFG.email,type:"email"})}${I("address","Address",{defaultValue:CFG.address})}${I("footer","Receipt footer message",{defaultValue:CFG.footer})}
+ <label>Logo (auto-compressed)<input type="file" accept="image/*" onChange=${e=>e.target.files[0]&&run(async()=>setIm(await squeeze(e.target.files[0])))}/></label>${im&&h`<img src=${im} style="width:90px;height:90px;border-radius:50%;object-fit:cover"/>`}<br/><button class="p">Save settings</button></form><hr/><button class="s" onClick=${pin}>Change Super Admin PIN</button></div>`}
+
+/* ---- POS ---- */
+function POS({d,x:close}){const nowL=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
+ const [cart,setCart]=useState([]),[cn,setCn]=useState(""),[dv,setDv]=useState(nowL),[sel,setSel]=useState({cash:true}),[amt,setAmt]=useState({}),[row,setRow]=useState({n:"",q:"1",p:"",o:""}),[busy,setBusy]=useState(false),[rc,setRc]=useState(null),[nc,setNc]=useState(false),[op,setOp]=useState(false);
+ const CU=d.customers||[],cu=(CU.find(c=>c.name.toLowerCase()==cn.trim().toLowerCase())||{}).id||"",P=(d.products||[]).filter(p=>!p.arch),prod=P.find(p=>p.name==row.n),eff=l=>Math.round(l.p*(1-(l.o||0)/100)*100)/100;
+ const total=sum(cart,l=>l.q*eff(l)),ms=["cash","transfer","pos"].filter(k=>sel[k]),single=ms.length==1&&!sel.credit,pay={cash:0,transfer:0,pos:0};
+ ms.forEach(k=>pay[k]=single?total:+amt[k]||0);const paid=pay.cash+pay.transfer+pay.pos,credit=Math.round((total-paid)*100)/100;
+ const add=()=>{if(!prod)return alert("Choose a product from the list");const q=+row.q;if(!(q>0))return alert("Enter a quantity");setCart(c=>[...c,{id:prod.id,name:prod.name,q,p:+row.p||prod.price,o:+row.o||0}]);setRow({n:"",q:"1",p:"",o:""})};
+ async function done(){if(!cart.length)return alert("Cart is empty");if(credit<0)return alert("Payments are more than the total");if(credit>0&&!sel.credit)return alert("Amounts are less than the total. Select Credit for the balance.");if(credit>0&&!cu)return alert("Select a customer for a credit sale");
+  const need={};cart.forEach(l=>need[l.id]=(need[l.id]||0)+l.q);for(const id in need){const p=P.find(x=>x.id==id);if(!p||need[id]>p.qty)return alert("Not enough stock: "+(p?p.name:id))}
+  const when=dv?new Date(dv).getTime():Date.now();setBusy(true);const rid="MF"+new Date(when).toISOString().slice(2,10).replace(/-/g,"")+"-"+uid().slice(0,5).toUpperCase();
+  await run(async()=>{const sale=await db.runTransaction(async tx=>{const sr=db.collection("sales").doc(rid);if((await tx.get(sr)).exists)throw Error("Duplicate transaction");
+   const pr={};for(const id in need)pr[id]=await tx.get(db.collection("products").doc(id));const cr=cu?db.collection("customers").doc(cu):null,cs=cr?await tx.get(cr):null;
+   const cur={},qn={};for(const id in need){cur[id]=pr[id].data().batches||[];qn[id]=pr[id].data().qty}
+   const lines=[],mv=[];let cogs=0,sb=0,lp=0;for(const l of cart){const r=take(cur[l.id],l.q);if(!r)throw Error("Insufficient stock: "+l.name);cur[l.id]=r.bs;cogs+=r.cost;sb+=l.q*eff(l);lp+=l.q*l.p;lines.push({id:l.id,name:l.name,qty:l.q,price:eff(l),listPrice:l.p,cost:r.cost});const prev=qn[l.id];qn[l.id]=prev-l.q;mv.push({pid:l.id,name:l.name,type:"sale",prev,nw:qn[l.id],chg:-l.q,reason:rid,loss:false,lossValue:0,by:ME.name,ts:Date.now()})}
+   const tot=Math.round(sb*100)/100,cdt=Math.round((tot-paid)*100)/100;if(cdt<0)throw Error("Payment mismatch");
+   for(const id in need)tx.update(db.collection("products").doc(id),{batches:cur[id],qty:qn[id]});mv.forEach(m=>tx.set(mvDoc(),m));
+   const s={ref:rid,ts:when,lines,sub:Math.round(lp*100)/100,disc:Math.round((lp-sb)*100)/100,total:tot,pay:{...pay},paid,credit:cdt,cogs,custId:cu||"",cust:cs?cs.data().name:"",by:ME.name,uid:ME.id,status:cdt==0?"Fully paid":paid>0?"Partially paid":"Unpaid (credit)"};
+   tx.set(sr,s);if(cr)tx.update(cr,{debt:(cs.data().debt||0)+cdt,total:(cs.data().total||0)+tot,paid:(cs.data().paid||0)+paid,count:(cs.data().count||0)+1,lastCredit:cdt>0?when:cs.data().lastCredit||0});return s});
+   log("Sale",rid+" "+N(sale.total)+(sale.credit?" credit "+N(sale.credit):""));setRc(sale);setCart([]);setAmt({});setCn("");setSel({cash:true});setDv(nowL())});setBusy(false)}
+ async function newC(e){const f=frm(e);const r=await db.collection("customers").add({name:f.name,phone:f.phone,addr:f.addr,debt:0,total:0,paid:0,count:0,ts:Date.now()});log("Customer added",f.name);setCn(f.name);setNc(false)}
+ if(rc)return h`<${Receipt} r=${rc} x=${close}/>`;
+ return h`<${React.Fragment}><${Modal} w="pos" t="🛒 New Sale" x=${close}>
+ <label>Customer<input list="cl" placeholder="Walk-in customer" value=${cn} onInput=${e=>setCn(e.target.value)}/></label><datalist id="cl">${CU.map(c=>h`<option value=${c.name}>${c.phone}</option>`)}</datalist>${cn.trim()&&!cu&&h`<div class="err" style="margin:0 0 8px;font-size:12px">Not a saved customer – <a href="#" onClick=${ev=>{ev.preventDefault();setNc(true)}}>save as new customer</a></div>`}
+ <label>Sale date (back-date)<input type="datetime-local" value=${dv} onChange=${e=>setDv(e.target.value)}/></label>
+ <label>Payment method</label><div class="mb">${[["cash","💵 Cash"],["transfer","🏦 Transfer"],["pos","💳 Card"],["credit","📒 Credit"]].map(([k,l])=>h`<button type="button" class=${sel[k]?"on":""} onClick=${()=>setSel({...sel,[k]:!sel[k]})}>${l}</button>`)}</div>
+ ${!single&&ms.length>0&&h`<div class="row">${ms.map(k=>h`<label>${k.toUpperCase()} amount ₦<input type="number" value=${amt[k]||""} onInput=${e=>setAmt({...amt,[k]:e.target.value})}/></label>`)}</div>`}
+ <div class="addbox"><b>➕ ADD PRODUCT TO CART</b><div class="row ar" style="margin:8px 0 0"><div class="pw" style="position:relative"><label>Product<input autocomplete="off" placeholder="🔍 Search product…" value=${row.n} onFocus=${()=>setOp(true)} onBlur=${()=>setTimeout(()=>setOp(false),250)} onInput=${e=>{setRow({...row,n:e.target.value,p:""});setOp(true)}}/></label>${op&&h`<div class="dd">${P.filter(p=>!row.n||p.name.toLowerCase().includes(row.n.toLowerCase())).map(p=>h`<div class="di" onClick=${()=>{setRow({...row,n:p.name,p:""});setOp(false)}}><div><b>${p.name}</b><small class=${p.qty>0?"":"z"}>${p.qty} units in stock</small></div><span class="pr2">${N(p.price)}</span></div>`)}</div>`}</div>
+ <label>Qty<input type="number" step="any" value=${row.q} onInput=${e=>setRow({...row,q:e.target.value})}/></label><label>Price (₦)<input type="number" placeholder=${prod?String(prod.price):"Auto"} value=${row.p} onInput=${e=>setRow({...row,p:e.target.value})}/></label><label>% off<input type="number" placeholder="0" value=${row.o} onInput=${e=>setRow({...row,o:e.target.value})}/></label><button class="p" type="button" style="flex:0;white-space:nowrap" onClick=${add}>+ Add</button></div></div>
+ ${cart.length?h`<${T} c=${["Product","Qty","Price","% off","Total",""]} r=${cart.map((l,i)=>[l.name,l.q,N(l.p),l.o||0,N(l.q*eff(l)),h`<button class="d2" onClick=${()=>setCart(c=>c.filter((_,j)=>j!=i))}>✕</button>`])}/>`:h`<p style="text-align:center;color:var(--m)">👆 Select a product and click “+ Add” to build your cart</p>`}
+ <h2 style="margin:8px 0">Total ${N(total)}</h2><div>Paid ${N(paid)} · <b style=${"color:"+(credit<0?"var(--r)":"inherit")}>${credit<0?"Over by "+N(-credit):"Credit / outstanding "+N(credit)}</b></div>
+ <div class="pf"><button class="s" onClick=${close}>Cancel</button><button class="ok" style="flex:0;white-space:nowrap" disabled=${busy||!cart.length} onClick=${done}>${busy?"Processing…":"✓ Complete Sale"}</button></div><//>
+ ${nc&&h`<${Modal} t="New customer" x=${()=>setNc(false)}><form onSubmit=${e=>run(()=>newC(e))}>${I("name","Name",{required:1})}${I("phone","Phone",{required:1})}${I("addr","Address (optional)")}<button class="p">Save</button></form><//>`}<//>`}
+
+/* ---- Products ---- */
+function Products({d}){const [q,setQ]=useState(""),[sp,setSp]=useState(null),[ed,setEd0]=useState(null),[im,setIm]=useState(""),[cat,setCat]=useState(""),[so,setSo]=useState("az"),ca=ME.role=="cashier";
+ const setEd=p=>{setIm(p?.img||"");setEd0(p)};
+ const cats=[...new Set((d.products||[]).map(p=>p.cat).filter(Boolean))],ps=(d.products||[]).filter(p=>(p.name+p.cat).toLowerCase().includes(q.toLowerCase())&&(!cat||p.cat==cat)).sort((a,b)=>so=="za"?b.name.localeCompare(a.name):so=="pr"?b.price-a.price:so=="st"?a.qty-b.qty:a.name.localeCompare(b.name));
+ async function sv(e){const f=frm(e);const o={name:(f.name||"").trim(),cat:f.cat,img:f.img||"",cost:+f.cost,price:+f.price,min:+f.min||0};
+  if(ed.id){const ref=db.collection("products").doc(ed.id);await ref.update(ca?{price:o.price}:o);if(ed.price!=o.price){await db.collection("prices").add({pid:ed.id,name:ed.name,old:ed.price,new:o.price,by:ME.name,ts:Date.now()});log("Price change",`${ed.name}: ${N(ed.price)} → ${N(o.price)}`)}log("Product updated",ed.name)}
+  else{const n=+f.qty||0,b=n>0?[{id:uid(),qty:n,cost:o.cost,date:Date.now(),exp:f.exp?new Date(f.exp).getTime():0}]:[];const r=await db.collection("products").add({...o,batches:b,qty:n,arch:false,ts:Date.now()});
+   if(n>0)await db.collection("moves").add({pid:r.id,name:o.name,type:"add",prev:0,nw:n,chg:n,reason:"Opening stock",loss:false,lossValue:0,by:ME.name,ts:Date.now()});log("Product created",o.name)}setEd(null)}
+ const arch=async p=>{if(confirm((p.arch?"Restore ":"Archive ")+p.name+"? History is kept."))await run(async()=>{await db.collection("products").doc(p.id).update({arch:!p.arch});log("Product "+(p.arch?"restored":"archived"),p.name)})};
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><div><h2 style="margin:0">Products</h2><small>${ps.length} of ${(d.products||[]).length} products</small></div>${!ca&&h`<button class="s" style="flex:0;white-space:nowrap" onClick=${()=>csv("products",[["Name","Category","Cost","Price","Qty","Value"],...(d.products||[]).map(p=>[p.name,p.cat,p.cost,p.price,p.qty,stockVal(p)])])}>📤 Export</button><button class="s" style="flex:0;white-space:nowrap" onClick=${()=>setSp("")}>📥 Supply</button><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>setEd({})}>+ Add Product</button>`}</div>
+ <div class="row"><input placeholder="Search…" value=${q} onInput=${e=>setQ(e.target.value)}/><select value=${cat} onChange=${e=>setCat(e.target.value)}><option value="">All Categories</option>${cats.map(c=>h`<option>${c}</option>`)}</select><select value=${so} onChange=${e=>setSo(e.target.value)}><option value="az">A–Z</option><option value="za">Z–A</option><option value="pr">Price: high</option><option value="st">Stock: low first</option></select></div>
+ <div class="pg">${ps.map(p=>h`<div class=${"pc "+(p.qty<=0?"out":p.qty<=p.min?"low":"")}><div class="pi">${p.img?h`<img src=${p.img}/>`:"📦"}${(p.qty<=0||p.qty<=p.min)&&h`<span class=${"tag "+(p.qty<=0?"r":"o")}>${p.qty<=0?"OUT":"LOW"}</span>`}${p.arch&&h`<span class="tag r" style="left:10px;right:auto">ARCHIVED</span>`}</div>
+ <div class="pb"><div class="cat">${p.cat}</div><b style="font-size:17px">${p.name}</b><div class="row" style="margin:6px 0;align-items:center"><span class="pr">${N(p.price)}</span><span class=${"tag "+(p.qty<=0?"r":p.qty<=p.min?"o":"")} style="flex:0;white-space:nowrap">${p.qty} units</span></div>
+ <small>Margin: <b style="color:#0a8f4a">${N(p.price-p.cost)}</b> (${p.price?Math.round((p.price-p.cost)/p.price*100):0}%) · Stock value ${N(stockVal(p))}</small>
+ <div class="row" style="margin:10px 0 0"><button class="s" onClick=${()=>setEd(p)}>✏️ Edit</button>${!ca&&h`<button class="s" title="Record supply" onClick=${()=>setSp(p.id)}>📥 Supply</button>`}${!ca&&h`<button class="d2" style="flex:0" onClick=${()=>arch(p)}>${p.arch?"Restore":"🗑️"}</button>`}</div></div></div>`)}</div>
+ ${!ps.length&&h`<div class="card">No products found.</div>`}
+ ${sp!==null&&h`<${SupplyForm} d=${d} pid=${sp} x=${()=>setSp(null)}/>`}
+ ${ed&&h`<${Modal} t=${ed.id?"Edit product":"New product"} x=${()=>setEd(null)}><form onSubmit=${e=>run(()=>sv(e))}>${ca&&h`<p>Cashiers may only change the selling price.</p>`}${I("name","Name",{required:1,defaultValue:ed.name,disabled:ca})}${I("cat","Category",{required:1,defaultValue:ed.cat,list:"cats",disabled:ca})}<datalist id="cats"><option>Poultry</option><option>Grains</option><option>Oils</option><option>Meat</option><option>Vegetables</option><option>Other</option></datalist>
+ <input type="hidden" name="img" value=${im}/>${!ca&&h`<label>Product image (auto-compressed, any size)<input type="file" accept="image/*" onChange=${e=>e.target.files[0]&&run(async()=>setIm(await squeeze(e.target.files[0])))}/></label>`}${im&&h`<div class="row" style="align-items:center"><img src=${im} style="max-width:120px;max-height:120px;border-radius:6px;flex:0"/><small>${Math.round(im.length/1024)} KB</small>${!ca&&h`<button type="button" class="d2" style="flex:0" onClick=${()=>setIm("")}>Remove</button>`}</div>`}<div class="row">${I("cost","Cost price ₦ (per unit)",{type:"number",step:"any",required:1,defaultValue:ed.cost,disabled:ca})}${I("price","Selling price ₦",{type:"number",step:"any",required:1,defaultValue:ed.price})}</div>
+ <div class="row">${I("min","Low-stock alert qty",{type:"number",defaultValue:ed.min??5,disabled:ca})}${!ed.id&&I("qty","Opening quantity",{type:"number",step:"any",defaultValue:0})}${!ed.id&&I("exp","Expiry (optional)",{type:"date"})}</div><button class="p">Save</button></form><//>`}<//>`}
+
+/* ---- Stock ---- */
+function Stock({d}){const P=(d.products||[]).filter(p=>!p.arch),[m,setM]=useState(null);
+ async function adj(e){const f=frm(e),q=+f.qty,t=f.type;if(!(q>=0))throw Error("Invalid quantity");
+  await db.runTransaction(async tx=>{const ref=db.collection("products").doc(f.pid),p=(await tx.get(ref)).data();let bs=p.batches||[];const prev=qtyOf(bs);let lv=0;const nb=n=>({id:uid(),qty:n,cost:p.cost,date:Date.now(),exp:f.exp?new Date(f.exp).getTime():0});
+   if(t=="add")bs=[...bs,nb(q)];else{const dq=t=="set"?prev-q:q;if(dq<0)bs=[...bs,nb(-dq)];else{const r=take(bs,dq);if(!r)throw Error("Not enough stock");bs=r.bs;lv=r.cost}}
+   const nw=qtyOf(bs),loss=["damaged","spoiled","expired"].includes(t);tx.update(ref,{batches:bs,qty:nw});tx.set(mvDoc(),{pid:f.pid,name:p.name,type:t,prev,nw,chg:nw-prev,reason:f.reason,loss,lossValue:loss?lv:0,by:ME.name,ts:Date.now()})});
+  log("Stock "+t,`${f.pid} qty ${q}: ${f.reason}`);setM(null)}
+ return h`<div class="card"><div class="row"><button class="p" onClick=${()=>setM(1)}>Add / adjust / record loss</button></div><b>Current stock</b>
+ <${T} c=${["Product","Qty","Min","Value","Status"]} r=${P.map(p=>[p.name,p.qty,p.min,N(stockVal(p)),p.qty<=0?h`<span class="tag r">Out of stock</span>`:p.qty<=p.min?h`<span class="tag o">Low</span>`:h`<span class="tag">OK</span>`])}/></div>
+ <div class="card"><b>Stock movement history</b><${T} c=${["Date","Product","Type","Prev","New","Change","Reason","By"]} r=${[...(d.moves||[])].sort((a,b)=>b.ts-a.ts).slice(0,150).map(x=>[dt(x.ts),x.name,x.type,x.prev,x.nw,x.chg,x.reason,x.by])}/></div>
+ ${m&&h`<${Modal} t="Stock operation" x=${()=>setM(null)}><form onSubmit=${e=>run(()=>adj(e))}><label>Product<select name="pid" required>${P.map(p=>h`<option value=${p.id}>${p.name} (${p.qty})</option>`)}</select></label>
+ <label>Operation<select name="type"><option value="add">Add stock</option><option value="deduct">Deduct stock</option><option value="set">Adjust to exact quantity</option><option value="damaged">Damaged</option><option value="spoiled">Spoiled</option><option value="expired">Expired</option></select></label>
+ ${I("qty","Quantity (or new total for 'adjust')",{type:"number",step:"any",required:1})}${I("exp","Expiry date (for added stock)",{type:"date"})}${I("reason","Reason",{required:1})}<button class="p">Save</button></form><//>`}`}
+
+/* ---- Purchases ---- */
+function SupplyForm({d,pid,x}){const P=(d.products||[]).filter(p=>!p.arch),S=d.suppliers||[],[ns,setNs]=useState(!S.length);
+ async function sv(e){const f=frm(e),qty=+f.qty,cost=+f.cost,total=qty*cost,paid=+f.paid||0;if(qty<=0||cost<0||paid>total)throw Error("Check quantity, price and amount paid");
+  let sref=f.sid=="new"?db.collection("suppliers").doc():db.collection("suppliers").doc(f.sid);if(f.sid=="new"&&!f.sname)throw Error("Enter supplier name");
+  await db.runTransaction(async tx=>{const pref=db.collection("products").doc(f.pid),p=(await tx.get(pref)).data(),ss=await tx.get(sref);const sd=ss.exists?ss.data():{name:f.sname,phone:f.sphone||"",address:f.saddr||"",balance:0,ts:Date.now()};
+   const bs=[...(p.batches||[]),{id:uid(),qty,cost,date:Date.now(),exp:f.exp?new Date(f.exp).getTime():0}],nw=qtyOf(bs);
+   tx.update(pref,{batches:bs,qty:nw,cost});tx.set(sref,{...sd,balance:(sd.balance||0)+total-paid});
+   tx.set(db.collection("purchases").doc(),{pid:f.pid,name:p.name,qty,cost,total,paid,bal:total-paid,status:paid>=total?"Fully paid":paid>0?"Partially paid":"Unpaid",sid:sref.id,supplier:sd.name,phone:sd.phone,method:f.method,inv:f.inv,date:f.date,by:ME.name,ts:Date.now()});
+   tx.set(mvDoc(),{pid:f.pid,name:p.name,type:"purchase",prev:p.qty,nw,chg:qty,reason:"Supply from "+sd.name,loss:false,lossValue:0,by:ME.name,ts:Date.now()})});
+  log("Supply",`${qty} x ${f.pid} = ${N(total)}`);x()}
+ return h`<${Modal} t="📥 Record supply" x=${x}><form onSubmit=${e=>run(()=>sv(e))}><label>Product<select name="pid" defaultValue=${pid||""} required><option value="">Choose product…</option>${P.map(p=>h`<option value=${p.id}>${p.name} (${p.qty} in stock)</option>`)}</select></label>
+ <label>Supplier<select name="sid" onChange=${e=>setNs(e.target.value=="new")}>${S.map(s=>h`<option value=${s.id}>${s.name}</option>`)}<option value="new">+ New supplier</option></select></label>${(ns||!S.length)&&h`<div class="row">${I("sname","Supplier name")}${I("sphone","Supplier phone")}</div>${I("saddr","Supplier address")}`}
+ <div class="row">${I("qty","Quantity supplied",{type:"number",step:"any",required:1})}${I("cost","Unit cost price ₦",{type:"number",step:"any",required:1})}</div><div class="row">${I("paid","Amount paid ₦",{type:"number",step:"any",defaultValue:0})}<label>Payment method<select name="method"><option>Cash</option><option>Bank transfer</option><option>POS</option></select></label></div>
+ <div class="row">${I("date","Supply date",{type:"date",required:1,defaultValue:new Date().toISOString().slice(0,10)})}${I("exp","Expiry (optional)",{type:"date"})}</div>${I("inv","Invoice no. / note")}<div class="pf"><button type="button" class="s" onClick=${x}>Cancel</button><button class="p">Confirm supply</button></div></form><//>`}
+function Purchases({d}){const [m,setM]=useState(false);
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><div><h2 style="margin:0">📥 Supply</h2><small>Record stock supplied by your suppliers</small></div><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>setM(true)}>+ Record supply</button></div>
+ <div class="card" style="padding:0"><${T} c=${["Date","Product","Qty","Unit cost","Total","Paid","Owing","Status","Supplier","Phone","Inv/Note","By"]} r=${[...(d.purchases||[])].sort((a,b)=>b.ts-a.ts).map(x=>[x.date,x.name,x.qty,N(x.cost),N(x.total),N(x.paid),N(x.bal),x.status,x.supplier,x.phone||"",x.inv,x.by])} e="No supplies recorded yet"/></div>${m&&h`<${SupplyForm} d=${d} x=${()=>setM(false)}/>`}<//>`}
+
+/* ---- Customers ---- */
+function Customers({d}){const [q,setQ]=useState(""),[sel,setSel]=useState(null),[add,setAdd]=useState(false),[rc,setRc]=useState(null);const C=d.customers||[];
+ const L=C.filter(c=>(c.name+c.phone).toLowerCase().includes(q.toLowerCase())),c=C.find(x=>x.id==sel);
+ async function nw(e){const f=frm(e);await db.collection("customers").add({name:f.name,phone:f.phone,addr:f.addr,debt:0,total:0,paid:0,count:0,ts:Date.now()});log("Customer added",f.name);setAdd(false)}
+ async function rp(e){const f=frm(e),pay={cash:+f.cash||0,transfer:+f.transfer||0,pos:+f.pos||0},amt=pay.cash+pay.transfer+pay.pos;if(amt<=0)throw Error("Enter an amount");const ref="RP"+Date.now().toString(36).toUpperCase();
+  const r=await db.runTransaction(async tx=>{const cr=db.collection("customers").doc(c.id),cs=await tx.get(cr),cd=cs.data();if(amt>cd.debt)throw Error("Amount exceeds debt of "+N(cd.debt));const o={ref,ts:Date.now(),cid:c.id,cust:cd.name,pay,amount:amt,balance:cd.debt-amt,by:ME.name};tx.update(cr,{debt:cd.debt-amt,paid:(cd.paid||0)+amt});tx.set(db.collection("repays").doc(ref),o);return o});log("Debt repayment",`${c.name} ${N(amt)}`);setRc(r)}
+ const sales=c?(d.sales||[]).filter(s=>s.custId==c.id).sort((a,b)=>b.ts-a.ts):[],reps=c?(d.repays||[]).filter(s=>s.cid==c.id).sort((a,b)=>b.ts-a.ts):[];
+ return h`<div class="card"><div class="row"><input placeholder="Search name or phone…" value=${q} onInput=${e=>setQ(e.target.value)}/><button class="p" onClick=${()=>setAdd(true)}>+ New customer</button></div>
+ <${T} c=${["Name","Phone","Transactions","Total purchases","Paid","Outstanding",""]} r=${L.map(x=>[x.name,x.phone,x.count,N(x.total),N(x.paid),h`<b style=${x.debt>0?"color:var(--r)":""}>${N(x.debt)}</b>${x.debt>0&&x.lastCredit&&Date.now()-x.lastCredit>30*864e5?h` <span class="tag r">overdue</span>`:""}`,h`<button class="s" onClick=${()=>setSel(x.id)}>Open</button>`])}/></div>
+ ${c&&h`<${Modal} t=${c.name+" – "+c.phone} x=${()=>setSel(null)}><p>Registered ${dd(c.ts)} · ${c.addr||"no address"}<br/>Outstanding: <b>${N(c.debt)}</b></p>
+ ${c.debt>0&&h`<form onSubmit=${e=>run(()=>rp(e))}><b>Record repayment</b><div class="row">${["cash","transfer","pos"].map(k=>I(k,k.toUpperCase()+" ₦",{type:"number",step:"any"}))}<button class="p">Pay</button></div></form>`}
+ <b>Purchase history</b><${T} c=${["Date","Ref","Items","Total","Paid","Owing"]} r=${sales.map(s=>[dt(s.ts),s.ref,s.lines.map(l=>l.name+" x"+l.qty).join(", "),N(s.total),N(s.paid),N(s.credit)])}/>
+ <b>Repayments</b><${T} c=${["Date","Ref","Amount","Left",""]} r=${reps.map(r=>[dt(r.ts),r.ref,N(r.amount),N(r.balance),h`<button class="s" onClick=${()=>setRc(r)}>Receipt</button>`])}/><//>`}
+ ${add&&h`<${Modal} t="New customer" x=${()=>setAdd(false)}><form onSubmit=${e=>run(()=>nw(e))}>${I("name","Name",{required:1})}${I("phone","Phone",{required:1})}${I("addr","Address (optional)")}<button class="p">Save</button></form><//>`}${rc&&h`<${Receipt} r=${rc} x=${()=>setRc(null)}/>`}`}
+
+/* ---- Suppliers ---- */
+function Suppliers({d}){const [sel,setSel]=useState(null),[nw,setNw]=useState(false);const S=d.suppliers||[],s=S.find(x=>x.id==sel);
+ async function pay(e){const f=frm(e),a=+f.amount;await db.runTransaction(async tx=>{const r=db.collection("suppliers").doc(s.id),x=(await tx.get(r)).data();if(!(a>0)||a>x.balance)throw Error("Amount must be between 1 and "+x.balance);tx.update(r,{balance:x.balance-a});tx.set(db.collection("spays").doc(),{sid:s.id,supplier:x.name,amount:a,method:f.method,by:ME.name,ts:Date.now()})});log("Supplier payment",`${s.name} ${N(a)}`)}
+ return h`<div class="card"><div class="row"><h3 style="margin:0">🚚 Suppliers</h3><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>setNw(true)}>+ New supplier</button></div><${T} c=${["Supplier","Phone","Owed","Purchases",""]} r=${S.map(x=>[x.name,x.phone,N(x.balance),(d.purchases||[]).filter(p=>p.sid==x.id).length,h`<button class="s" onClick=${()=>setSel(x.id)}>Open</button>`])}/><small>New suppliers are created when you record a purchase.</small></div>
+ ${nw&&h`<${Modal} t="New supplier" x=${()=>setNw(false)}><form onSubmit=${e=>run(async()=>{const f=frm(e);await db.collection("suppliers").add({name:f.name,phone:f.phone,address:f.address,balance:0,ts:Date.now()});log("Supplier added",f.name);setNw(false)})}>${I("name","Supplier name",{required:1})}${I("phone","Phone")}${I("address","Address")}<button class="p">Save</button></form><//>`}
+ ${s&&h`<${Modal} t=${s.name} x=${()=>setSel(null)}><p>Owed: <b>${N(s.balance)}</b></p>${s.balance>0&&h`<form onSubmit=${e=>run(()=>pay(e))}><div class="row">${I("amount","Pay ₦",{type:"number",step:"any",required:1})}<label>Method<select name="method"><option>Cash</option><option>Bank transfer</option><option>POS</option></select></label><button class="p">Record payment</button></div></form>`}
+ <b>Purchases</b><${T} c=${["Date","Product","Total","Paid","Owing"]} r=${(d.purchases||[]).filter(p=>p.sid==s.id).map(p=>[p.date,p.name,N(p.total),N(p.paid),N(p.bal)])}/><b>Payments</b><${T} c=${["Date","Amount","Method","By"]} r=${(d.spays||[]).filter(p=>p.sid==s.id).map(p=>[dt(p.ts),N(p.amount),p.method,p.by])}/><//>`}`}
+
+/* ---- Expenses ---- */
+function Expenses({d}){const [m,setM]=useState(false),[q,setQ]=useState(""),[cf,setCf]=useState(""),[pd,setPd]=useState("all");const E=d.expenses||[];
+ const t0=new Date().setHours(0,0,0,0),nw=new Date(),wk=t0-((nw.getDay()+6)%7)*864e5,mo=new Date(nw.getFullYear(),nw.getMonth(),1).getTime(),S=f=>sum(E.filter(x=>x.ts>=f),x=>x.amount);
+ const L=E.filter(x=>((x.title||"")+(x.desc||"")+(x.cat||"")).toLowerCase().includes(q.toLowerCase())&&(!cf||x.cat==cf)&&inR(x.ts,pd)).sort((a,b)=>b.ts-a.ts);
+ const sv=async e=>{const f=frm(e);await db.collection("expenses").add({title:f.title,cat:f.cat,amount:+f.amount,desc:f.desc,method:f.method,date:f.date,by:ME.name,ts:new Date(f.date+"T12:00").getTime()});log("Expense",`${f.title} ${N(f.amount)}`);setM(false)};
+ const del=x=>confirm("Delete this expense?")&&run(async()=>{await db.collection("expenses").doc(x.id).delete();log("Expense deleted",`${x.title} ${N(x.amount)}`)});
+ const cats=["Rent","Salary","Electricity","Transportation","Repairs","Packaging","Fuel","Other"];
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><div><h2 style="margin:0">💸 Expenses</h2><small>${E.length} expenses</small></div><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>setM(true)}>+ Add Expense</button></div>
+ <div class="grid"><${K} i="📅" l="Today" v=${N(S(t0))} c="x"/><${K} i="📆" l="This week" v=${N(S(wk))} c="x"/><${K} i="🗓️" l="This month" v=${N(S(mo))} c="x"/><${K} i="📊" l="All time" v=${N(S(0))} c="x"/></div>
+ <div class="row"><input placeholder="🔍 Search expenses…" value=${q} onInput=${e=>setQ(e.target.value)}/><select value=${cf} onChange=${e=>setCf(e.target.value)}><option value="">All Categories</option>${cats.map(c=>h`<option>${c}</option>`)}</select><select value=${pd} onChange=${e=>setPd(e.target.value)}><option value="all">All Time</option><option value="day">Today</option><option value="week">This Week</option><option value="month">This Month</option></select></div>
+ <div class="card" style="padding:0"><${T} c=${["#","Description","Category","Amount","Recorded by","Date",""]} r=${L.map((x,i)=>[L.length-i,h`<b>${x.title}</b>`,h`<span class="tag r">${(x.cat||"").toUpperCase()}</span>`,h`<b style="color:var(--r)">${N(x.amount)}</b>`,x.by,ds(x.ts),h`<button class="ib" onClick=${()=>del(x)}>🗑️</button>`])}/></div>
+ ${m&&h`<${Modal} t="New expense" x=${()=>setM(false)}><form onSubmit=${e=>run(()=>sv(e))}>${I("title","Title",{required:1})}<label>Category<select name="cat">${cats.map(c=>h`<option>${c}</option>`)}</select></label>${I("amount","Amount ₦",{type:"number",step:"any",required:1})}${I("desc","Description")}<label>Method<select name="method"><option>Cash</option><option>Bank transfer</option><option>POS</option></select></label>${I("date","Date",{type:"date",required:1,defaultValue:new Date().toISOString().slice(0,10)})}<button class="p">Save</button></form><//>`}<//>`}
+
+/* ---- Credit payments ---- */
+function Credits({d}){const [pm,setPm]=useState(null),[rc,setRc]=useState(null),[fc,setFc]=useState("");const C=d.customers||[];
+ const rows=C.map(c=>({c,owed:sum((d.sales||[]).filter(s=>s.custId==c.id),s=>s.credit),paid:sum((d.repays||[]).filter(r=>r.cid==c.id),r=>r.amount)})).filter(x=>x.owed>0||x.paid>0).sort((a,b)=>b.c.debt-a.c.debt);
+ const H=(d.repays||[]).filter(r=>!fc||r.cid==fc).sort((a,b)=>b.ts-a.ts);
+ async function pay(e){const f=frm(e),c=C.find(x=>x.id==f.cid),p={cash:+f.cash||0,transfer:+f.transfer||0,pos:+f.pos||0},amt=p.cash+p.transfer+p.pos;if(!c)throw Error("Choose a customer");if(amt<=0)throw Error("Enter an amount");const ref="RP"+Date.now().toString(36).toUpperCase();
+  const r=await db.runTransaction(async tx=>{const cr=db.collection("customers").doc(c.id),cd=(await tx.get(cr)).data();if(amt>cd.debt)throw Error("Amount exceeds debt of "+N(cd.debt));const o={ref,ts:Date.now(),cid:c.id,cust:cd.name,pay:p,amount:amt,balance:cd.debt-amt,by:ME.name,note:f.note||""};tx.update(cr,{debt:cd.debt-amt,paid:(cd.paid||0)+amt});tx.set(db.collection("repays").doc(ref),o);return o});
+  log("Debt repayment",`${c.name} ${N(amt)}`);setPm(null);setRc(r)}
+ const ml=r=>["cash","transfer","pos"].filter(k=>r.pay[k]>0).map(k=>k.toUpperCase()).join("+")||"-";
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><div><h2 style="margin:0">💳 Credit Payments</h2><small>Record payments from customers buying on credit</small></div><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>setPm("")}>+ Record Payment</button></div>
+ <div class="grid"><${K} i="📋" c="d" l="Total owed" v=${N(sum(rows,x=>x.owed))}/><${K} i="✅" c="ok" l="Total paid" v=${N(sum(rows,x=>x.paid))}/><${K} i="⏳" c="w" l="Balance remaining" v=${N(sum(C,c=>c.debt))}/></div>
+ <div class="card"><b>👥 Credit Customers</b>${rows.length?rows.map(({c,owed,paid})=>h`<div class="lrow"><div><b>${c.name}</b><br/><small>Owed: ${N(owed)} · Paid: ${N(paid)}</small></div><div style="text-align:right">${c.debt>0?h`<b style="color:var(--r)">${N(c.debt)}</b> <button class="ok" style="padding:6px 10px;font-size:13px" onClick=${()=>setPm(c.id)}>💳 Pay</button><br/><small>Balance due</small>`:h`<b style="color:#0a8f4a">${N(0)}</b><br/><small>Cleared ✅</small>`}</div></div>`):h`<p>No credit customers yet.</p>`}</div>
+ <div class="card"><div class="row" style="align-items:center"><b>📋 Payment History</b><select value=${fc} onChange=${e=>setFc(e.target.value)}><option value="">All customers</option>${C.map(c=>h`<option value=${c.id}>${c.name}</option>`)}</select><button class="s" style="flex:0;white-space:nowrap" onClick=${()=>setFc("")}>✕ All</button></div>
+ <${T} c=${["#","Customer","Amount paid","Method","Note","Recorded by","Date"]} r=${H.map((r,i)=>[H.length-i,h`<b>${r.cust}</b>`,h`<b style="color:#0a8f4a">${N(r.amount)}</b>`,h`<span class="tag">${ml(r)}</span>`,r.note||"—",r.by,ds(r.ts)])}/></div>
+ ${pm!=null&&h`<${Modal} t="Record payment" x=${()=>setPm(null)}><form onSubmit=${e=>run(()=>pay(e))}><label>Customer<select name="cid" defaultValue=${pm} required><option value="">Choose…</option>${C.filter(c=>c.debt>0).map(c=>h`<option value=${c.id}>${c.name} – owes ${N(c.debt)}</option>`)}</select></label><div class="row">${["cash","transfer","pos"].map(k=>I(k,k.toUpperCase()+" ₦",{type:"number",step:"any"}))}</div>${I("note","Note (optional)")}<button class="ok">Save payment</button></form><//>`}${rc&&h`<${Receipt} r=${rc} x=${()=>setRc(null)}/>`}<//>`}
+
+/* ---- Reports & daily record ---- */
+function Reports({d}){const [rg,setRg]=useState({k:"day"}),[pr,setPr]=useState({k:"day",a:"",b:""}),[cf,setCf]=useState("");const d0=d;d=cf?{...d,sales:(d.sales||[]).filter(x=>x.by==cf)}:d;const c=calc(d,rangeOf(rg.k)),pc=calc(d,rangeOf(pr.k,pr.a,pr.b)),pcnt=k=>pc.S.filter(x=>x.pay[k]>0).length;const agg=(a,kf,vf)=>{const o={};a.forEach(x=>vf(x).forEach(([k,v,w])=>{o[k]=o[k]||[0,0];o[k][0]+=v;o[k][1]+=w}));return Object.entries(o)};
+ const byP=agg(c.S,x=>x,x=>x.lines.map(l=>[l.name,l.qty,l.qty*l.price-l.cost])),byC=agg(c.S,x=>x,x=>[[x.by,1,x.total]]);const P=d.products||[];
+ const sec=(t,cols,rows)=>h`<div class="card"><b>${t}</b><${T} c=${cols} r=${rows}/></div>`;
+ const cnt=k=>c.S.filter(x=>x.pay[k]>0).length,units=sum(c.S,x=>sum(x.lines,l=>l.qty)),[s0,e0]=rangeOf(rg.k,rg.a,rg.b),endD=Math.min(e0,new Date().setHours(0,0,0,0)+864e5),nd=14;
+ const tr=[...Array(nd)].map((_,i)=>{const st=endD-(nd-i)*864e5;return{l:new Date(st).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}),v:sum((d.sales||[]).filter(x=>x.ts>=st&&x.ts<st+864e5&&x.ts>=s0),x=>x.total)}});
+ const mx=Math.max(...tr.map(x=>x.v),1),xs=tr.map((x,i)=>[60+i*(520/(nd-1)),190-(x.v/mx)*150]),ln=xs.map(p=>p.join(",")).join(" "),topP=[...byP].sort((a,b)=>b[1][0]-a[1][0]).slice(0,5),tl=(c1,l,v,x,ic)=>h`<div class=${"tile "+c1}>${ic&&h`<span class="ic">${ic}</span>`}<small>${l}</small><b>${v}</b>${x&&h`<div style="font-size:11px;opacity:.8">${x}</div>`}</div>`;
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><h2 style="margin:0">Reports</h2><button class="s" style="flex:0;white-space:nowrap" onClick=${()=>csv("sales-report",[["Ref","Date","Customer","Total","Cash","Transfer","Card","Credit","COGS","Cashier"],...c.S.map(s=>[s.ref,dt(s.ts),s.cust,s.total,s.pay.cash,s.pay.transfer,s.pay.pos,s.credit,s.cogs,s.by])])}>📤 Export</button></div>
+ <div class="fl" style="margin-bottom:12px"><div class="chips">${[["day","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>h`<button class=${rg.k==k?"on":""} onClick=${()=>setRg({k})}>${l}</button>`)}</div><select value=${cf} onChange=${e=>setCf(e.target.value)}><option value="">All cashiers</option>${[...new Set((d0.sales||[]).map(x=>x.by))].map(n=>h`<option>${n}</option>`)}</select><button class="s" onClick=${()=>{setCf("");setRg({k:"day"})}}>✕</button></div>
+ <div class="grid"><${K} l="Sales" v=${c.S.length}/><${K} l="Revenue" v=${N(c.rev)}/><${K} l="Avg order" v=${N(c.S.length?c.rev/c.S.length:0)}/><${K} l="Units sold" v=${units}/></div>
+ <div class="card"><b>💰 Profit Report</b><div class="chips" style="margin:10px 0">${[["day","Today"],["yest","Yesterday"],["week","This Week"],["month","This Month"],["custom","Custom Range"]].map(([k,l])=>h`<button class=${pr.k==k?"on":""} onClick=${()=>setPr({...pr,k})}>${l}</button>`)}</div>${pr.k=="custom"&&h`<div class="row"><label>From<input type="date" value=${pr.a} onChange=${e=>setPr({...pr,a:e.target.value})}/></label><label>To<input type="date" value=${pr.b} onChange=${e=>setPr({...pr,b:e.target.value})}/></label></div>`}<div class="tiles">${tl("b","Total sales",N(pc.rev))}${tl("b","Cost of goods",N(pc.cogs))}${tl("g","Gross profit ▾",N(pc.gp))}${tl("r","Expenses",N(pc.exp))}${tl("b2","Net profit ▾",N(pc.net))}${tl("n","Transactions",pc.S.length)}</div></div>
+ <div class="card"><b>💳 Payment Method Breakdown</b><div class="tiles">${tl("g","Cash",N(pc.cash),pcnt("cash")+" sales","💵")}${tl("bl","Transfer",N(pc.transfer),pcnt("transfer")+" sales","🏦")}${tl("v","POS / ATM",N(pc.pos),pcnt("pos")+" sales","💳")}${tl("y","Credit",N(pc.credit),pc.S.filter(x=>x.credit>0).length+" sales","📋")}</div></div>
+ <div class="two"><div class="card"><b>Revenue Trend</b><svg viewBox="0 0 600 230" style="width:100%">${[0,.5,1].map(f=>h`<g><line x1="55" x2="590" y1=${190-f*150} y2=${190-f*150} stroke="#e2e7f5"/><text x="2" y=${194-f*150} font-size="11" fill="#94a0c0">${N(Math.round(mx*f))}</text></g>`)}<polyline points=${ln} fill="none" stroke="#2563eb" stroke-width="3"/>${xs.map((p,i)=>h`<g><circle cx=${p[0]} cy=${p[1]} r="3.5" fill="#2563eb"/>${i%2==0&&h`<text x=${p[0]} y="215" font-size="10" text-anchor="middle" fill="#94a0c0">${tr[i].l}</text>`}</g>`)}</svg></div>
+ <div class="card"><b>🏆 Top Products</b>${topP.length?topP.map(([k,v])=>h`<div class="lrow"><span>${k}</span><b>${v[0]} sold</b></div>`):h`<p style="text-align:center;color:var(--m)">No data</p>`}</div></div>
+ <div class="card"><b>Transactions</b><${T} c=${["#","Product","Qty","Total","Cashier","Date"]} r=${[...c.S].sort((a,b)=>b.ts-a.ts).slice(0,50).map((x,i)=>[i+1,x.lines.map(l=>l.name).join(", ").slice(0,40),sum(x.lines,l=>l.qty),N(x.total),x.by,dt(x.ts)])} e="No data for this period"/></div>
+ <h3>More reports</h3><div class="row"><button class="s" onClick=${()=>window.print()}>Print</button><button class="s" onClick=${()=>csv("sales",[["Ref","Date","Customer","Total","Cash","Transfer","Card","Credit","COGS","Cashier"],...c.S.map(s=>[s.ref,dt(s.ts),s.cust,s.total,s.pay.cash,s.pay.transfer,s.pay.pos,s.credit,s.cogs,s.by])])}>Download sales CSV</button><button class="s" onClick=${()=>csv("stock",[["Product","Qty","Cost","Price","Value"],...P.map(p=>[p.name,p.qty,p.cost,p.price,stockVal(p)])])}>Download stock CSV</button></div>
+ ${sec("Financial summary",["Item","Amount"],[["Total revenue (sales)",N(c.rev)],["Cost of goods sold (batch cost)",N(c.cogs)],["Gross profit",N(c.gp)],["Expenses",N(c.exp)],["Stock losses (damaged/spoiled/expired)",N(c.loss)],["Net profit",N(c.net)],["Purchases",N(c.purch)],["Customer debts (all time)",N(sum(d.customers||[],x=>x.debt))],["Supplier debts (all time)",N(sum(d.suppliers||[],x=>x.balance))],["Stock valuation",N(sum(P.filter(p=>!p.arch),stockVal))]])}
+ ${sec("Payments (money actually collected)",["Method","Amount"],[["Cash",N(c.cash)],["Bank transfer",N(c.transfer)],["POS",N(c.pos)],["Credit issued (NOT collected)",N(c.credit)],["Debt repayments (included above)",N(c.repaid)]])}
+ ${sec("Product sales",["Product","Qty sold","Gross profit"],byP.map(([k,v])=>[k,v[0],N(v[1])]))}${sec("Cashier sales",["Cashier","Sales","Value"],byC.map(([k,v])=>[k,v[0],N(v[1])]))}
+ ${sec("Sales",["Time","Ref","Customer","Total","Cash","Transfer","POS","Credit","By"],c.S.map(s=>[dt(s.ts),s.ref,s.cust,N(s.total),N(s.pay.cash),N(s.pay.transfer),N(s.pay.pos),N(s.credit),s.by]))}
+ ${sec("Repayments",["Time","Customer","Amount","By"],c.R.map(r=>[dt(r.ts),r.cust,N(r.amount),r.by]))}${sec("Purchases",["Date","Product","Total","Paid","By"],c.P.map(p=>[p.date,p.name,N(p.total),N(p.paid),p.by]))}${sec("Expenses",["Date","Title","Amount","By"],c.E.map(x=>[x.date,x.title,N(x.amount),x.by]))}
+ ${sec("Stock adjustments / losses",["Time","Product","Type","Change","Loss value","By"],c.M.filter(m=>!["sale","purchase"].includes(m.type)).map(m=>[dt(m.ts),m.name,m.type,m.chg,N(m.lossValue),m.by]))}
+ ${sec("Returns / refunds",["Date","Ref","Product","Qty","Refund","By"],c.RT.map(r=>[dt(r.ts),r.ref,r.name,r.qty,N(r.amount),r.by]))}${sec("Out of stock",["Product"],P.filter(p=>p.qty<=0&&!p.arch).map(p=>[p.name]))}${sec("Selling price history",["Date","Product","Old","New","By"],[...(d.prices||[])].sort((a,b)=>b.ts-a.ts).slice(0,50).map(p=>[dt(p.ts),p.name,N(p.old),N(p.new),p.by]))}<//>`}
+
+/* ---- Returns ---- */
+function Returns({d}){const [m,setM]=useState(false),[sid,setSid]=useState("");const R=[...(d.returns||[])].sort((a,b)=>b.ts-a.ts),sales=[...(d.sales||[])].sort((a,b)=>b.ts-a.ts).slice(0,300),sl=sales.find(x=>x.ref==sid);
+ const got=(ref,li)=>sum((d.returns||[]).filter(r=>r.ref==ref&&r.li==li),r=>r.qty);
+ async function sv(e){const f=frm(e),li=+f.li,q=+f.qty;if(!sl)throw Error("Choose a sale");const l=sl.lines[li];if(!l||!(q>0))throw Error("Enter a quantity");if(q+got(sl.ref,li)>l.qty)throw Error("Only "+(l.qty-got(sl.ref,li))+" left to return");
+  const amount=Math.round(q*l.price*100)/100,cost=Math.round(l.cost/l.qty*q*100)/100;
+  await db.runTransaction(async tx=>{const pr=db.collection("products").doc(l.id),ps=await tx.get(pr);if(!ps.exists)throw Error("Product no longer exists");let cr=null,cs=null;if(f.method=="credit"&&sl.custId){cr=db.collection("customers").doc(sl.custId);cs=await tx.get(cr)}
+   const p=ps.data(),bs=[...(p.batches||[]),{id:uid(),qty:q,cost:l.cost/l.qty,date:Date.now(),exp:0}],nw=qtyOf(bs);tx.update(pr,{batches:bs,qty:nw});
+   if(cs&&cs.exists)tx.update(cr,{debt:Math.max(0,(cs.data().debt||0)-amount)});
+   tx.set(db.collection("returns").doc(),{ref:sl.ref,li,pid:l.id,name:l.name,qty:q,amount,cost,method:f.method,reason:f.reason||"",by:ME.name,ts:Date.now()});
+   tx.set(mvDoc(),{pid:l.id,name:l.name,type:"return",prev:p.qty,nw,chg:q,reason:"Return "+sl.ref,loss:false,lossValue:0,by:ME.name,ts:Date.now()})});
+  log("Return",`${sl.ref} ${l.name} x${q} ${N(amount)}`);setM(false);setSid("")}
+ return h`<${React.Fragment}><div class="row" style="align-items:center"><div><h2 style="margin:0">↩️ Returns</h2><small>Customer returns put stock back and refund the sale</small></div><button class="p" style="flex:0;white-space:nowrap" onClick=${()=>setM(true)}>+ Record Return</button></div>
+ <div class="grid"><${K} i="↩️" c="x" l="Returns" v=${R.length}/><${K} i="💸" c="x" l="Refunded" v=${N(sum(R,r=>r.amount))}/></div>
+ <div class="card" style="padding:0"><${T} c=${["#","Date","Sale ref","Product","Qty","Refund","Method","Reason","By"]} r=${R.map((r,i)=>[R.length-i,ds(r.ts),r.ref,h`<b>${r.name}</b>`,r.qty,h`<b style="color:var(--r)">${N(r.amount)}</b>`,h`<span class="tag">${(r.method=="credit"?"DEBT":r.method||"").toUpperCase()}</span>`,r.reason||"—",r.by])} e="No returns recorded"/></div>
+ ${m&&h`<${Modal} t="Record return" x=${()=>{setM(false);setSid("")}}><form onSubmit=${e=>run(()=>sv(e))}><label>Sale<select value=${sid} onChange=${e=>setSid(e.target.value)} required><option value="">Choose a sale…</option>${sales.map(x=>h`<option value=${x.ref}>${x.ref} · ${x.cust||"Walk-in"} · ${N(x.total)}</option>`)}</select></label>
+ ${sl&&h`<label>Item<select name="li">${sl.lines.map((l,i)=>h`<option value=${i}>${l.name} – sold ${l.qty}, returned ${got(sl.ref,i)}</option>`)}</select></label><div class="row">${I("qty","Quantity returned",{type:"number",step:"any",required:1})}<label>Refund as<select name="method"><option value="cash">Cash</option><option value="transfer">Transfer</option><option value="pos">Card</option>${sl.custId&&h`<option value="credit">Reduce customer debt</option>`}</select></label></div>${I("reason","Reason")}`}
+ <div class="pf"><button type="button" class="s" onClick=${()=>{setM(false);setSid("")}}>Cancel</button><button class="p" disabled=${!sl}>Save return</button></div></form><//>`}<//>`}
+
+/* ---- Staff ---- */
+function Staff({d}){const [m,setM]=useState(false),[ed,setEd]=useState(null);
+ async function mk(e){const f=frm(e);const a2=firebase.apps.find(x=>x.name=="s")||firebase.initializeApp(FB,"s");const cr=await a2.auth().createUserWithEmailAndPassword(f.email,f.password);await a2.auth().signOut();
+  await db.collection("users").doc(cr.user.uid).set({name:f.name,email:f.email,role:f.role,active:true,ts:Date.now()});log("Staff created",`${f.name} (${f.role})`);setM(false)}
+ const up=async(u,o,l)=>run(async()=>{await db.collection("users").doc(u.id).update(o);log(l,u.name)});
+ const pin=async()=>{const p=prompt("New 4+ digit Super Admin PIN:");if(p&&p.length>=4){await db.collection("users").doc(ME.id).update({pinHash:await sha(p)});log("PIN changed")}};
+ return h`<div class="card"><div class="row"><button class="p" onClick=${()=>setM(true)}>+ Create staff</button><button class="s" onClick=${pin}>Change my PIN</button></div>
+ <${T} c=${["Name","Email","Role","Status","Actions"]} r=${(d.users||[]).map(u=>[u.name,u.email,u.role,u.active?h`<span class="tag">Active</span>`:h`<span class="tag r">Suspended</span>`,u.role=="admin"?"-":h`<span><button class="s" onClick=${()=>setEd(u)}>Permissions</button> <button class="s" onClick=${()=>up(u,{active:!u.active},u.active?"Staff suspended":"Staff activated")}>${u.active?"Suspend":"Activate"}</button> <button class="d2" onClick=${()=>auth.sendPasswordResetEmail(u.email).then(()=>alert("Reset email sent"))}>Reset password</button></span>`])}/></div>
+ ${m&&h`<${Modal} t="Create staff" x=${()=>setM(false)}><form onSubmit=${e=>run(()=>mk(e))}>${I("name","Name",{required:1})}${I("email","Email (login)",{type:"email",required:1})}${I("password","Password (min 6)",{required:1,minLength:6})}<label>Role<select name="role"><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="storekeeper">Storekeeper</option></select></label><button class="p">Create</button></form><//>`}
+ ${ed&&h`<${Modal} t=${"Permissions – "+ed.name} x=${()=>setEd(null)}><form onSubmit=${e=>{e.preventDefault();const f=new FormData(e.target);up(ed,{role:f.get("role"),pages:Object.keys(PAGES).filter(k=>!["staff","logs","settings"].includes(k)&&f.get(k))},"Permissions changed");setEd(null)}}>
+ <label>Role<select name="role" defaultValue=${ed.role}>${["manager","cashier","storekeeper"].map(r=>h`<option>${r}</option>`)}</select></label>${Object.keys(PAGES).filter(k=>!["staff","logs","settings"].includes(k)).map(k=>h`<label style="display:flex;gap:8px"><input type="checkbox" name=${k} style="width:auto" defaultChecked=${(ed.pages||RP[ed.role]).includes(k)}/>${PAGES[k]}</label>`)}<small>Note: data-level limits come from the role in Firestore rules.</small><br/><button class="p">Save</button></form><//>`}`}
+
+const Logs=({d})=>h`<div class="card"><${T} c=${["Time","Staff","Action","Detail"]} r=${[...(d.logs||[])].sort((a,b)=>b.ts-a.ts).slice(0,300).map(l=>[dt(l.ts),l.by,l.a,l.t])}/></div>`;
+
+/* ---- App shell ---- */
+let DEFER=null;window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();DEFER=e});
+const Mark=()=>h`<svg viewBox="0 0 130 130"><defs><linearGradient id="mkg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16a34a"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs><rect width="130" height="130" rx="30" fill="url(#mkg)"/><path d="M65 14C48 16 46 36 65 44 84 36 82 16 65 14Z" fill="#bbf7d0"/><path d="M42 70C42 46 88 46 88 70" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M32 70H98L90 102H40Z" fill="#fff"/><path d="M52 76V98M65 76V98M78 76V98" stroke="#2563eb" stroke-width="3"/></svg>`;
+const Logo=()=>h`${CFG.logo?h`<img src=${CFG.logo} style="width:130px;height:130px;border-radius:50%;object-fit:cover"/>`:h`<svg viewBox="0 0 130 130" width="130" height="130"><defs><linearGradient id="lgg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16a34a"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs><circle cx="65" cy="65" r="65" fill="url(#lgg)"/><path d="M65 18C48 20 46 40 65 48 84 40 82 20 65 18Z" fill="#bbf7d0"/><path d="M42 70C42 46 88 46 88 70" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M32 70H98L90 102H40Z" fill="#fff"/><path d="M52 76V98M65 76V98M78 76V98" stroke="#2563eb" stroke-width="3"/><text x="65" y="119" text-anchor="middle" font-size="10" font-weight="800" fill="#fff">MEGA FARMS</text></svg>`}`;
+const Pw=({n,l,ph})=>{const [v,setV]=useState(false);return h`<label>${l}<div style="position:relative"><input name=${n} type=${v?"text":"password"} placeholder=${ph} required minLength=${n=="password"?6:1} inputMode=${n=="pin"?"numeric":undefined}/><span style="position:absolute;right:14px;top:14px;cursor:pointer;font-size:20px" onClick=${()=>setV(!v)}>${v?"🙈":"👁"}</span></div></label>`};
+const inst=()=>{if(DEFER){DEFER.prompt();DEFER=null}else alert("In your browser menu (⋮) choose 'Add to Home screen' or 'Install app'.")};
+const Shell=({children})=>h`<div class="lg"><div class="lc"><${Logo}/>${children}<div class="ins"><div><b>Install Mega Farms App</b><small>Add to home screen for quick access</small></div><button type="button" onClick=${inst}>Install</button></div><div class="ft"><span class="dot"></span>Multi-device sync · <b>Super Admin</b></div></div></div>`;
+function Auth({boot}){const [e,setE]=useState(""),[tab,setTab]=useState("staff"),[bz,setBz]=useState(false);
+ async function go(ev){ev.preventDefault();const f=frm(ev);setE("");setBz(true);try{
+  if(boot){window.SETUP=1;const c=await auth.createUserWithEmailAndPassword(f.email,f.password);const b=db.batch();
+   b.set(db.collection("users").doc(c.user.uid),{name:f.name,email:f.email,role:"admin",active:true,pinHash:await sha("1990"),ts:Date.now()});b.set(db.doc("config/boot"),{done:true,ts:Date.now()});await b.commit();window.SETUP=0;location.reload()}
+  else{window.PENDPIN=tab=="admin"?f.pin:null;await auth.signInWithEmailAndPassword(f.email,f.password)}}catch(x){window.SETUP=0;window.PENDPIN=null;setE(x.message)}setBz(false)}
+ return h`<${Shell}>${!boot&&h`<div class="tabs"><button type="button" class=${tab=="staff"?"on":""} onClick=${()=>setTab("staff")}>Staff Login</button><button type="button" class=${tab=="admin"?"on":""} onClick=${()=>setTab("admin")}>Admin PIN</button></div>`}
+ <div style="font-weight:800;color:#2563eb;margin-top:8px">${CFG.name}</div><h2>${boot?"First-time setup":"Welcome back"}</h2><p>${boot?"Create the Super Admin account (PIN 1990, change later)":tab=="admin"?"Super Admin: sign in with your PIN":"Sign in with your staff credentials"}</p>
+ <form onSubmit=${go}>${boot&&I("name","Your name",{required:1})}${I("email","Email",{type:"email",required:1,placeholder:"staff@business.com"})}<${Pw} n="password" l="Password" ph="Password"/>${!boot&&tab=="admin"&&h`<${Pw} n="pin" l="Admin PIN" ph="PIN"/>`}
+ <div class="err">${e}</div><button class="go" disabled=${bz}>${bz?"Please wait…":boot?"Create Super Admin":"Sign In →"}</button></form><//>`}
+function Pin({me,ok}){const [e,setE]=useState("");return h`<${Shell}><h2>Admin PIN</h2><p>Enter your Super Admin PIN</p><form onSubmit=${async ev=>{const f=frm(ev);if(await sha(f.pin)==me.pinHash)ok();else setE("Wrong PIN")}}><${Pw} n="pin" l="PIN" ph="PIN"/><div class="err">${e}</div><button class="go">Unlock →</button></form><br/><button class="s" onClick=${()=>auth.signOut()}>Sign out</button><//>`}
+const Clock=()=>{const [t,setT]=useState(Date.now());useEffect(()=>{const i=setInterval(()=>setT(Date.now()),1000);return()=>clearInterval(i)},[]);const n=new Date(t);return h`<span class="clk">${n.toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short",year:"numeric"})} · ${n.toLocaleTimeString("en-GB")}</span>`};
+function App(){const [st,setSt]=useState("load"),[page,setPage]=useState("dash"),[rg,setRg]=useState({k:"day",a:"",b:""}),[menu,setMenu]=useState(false),[pos,setPos]=useState(false),[,setCf]=useState(0),[dark,setDark]=useState(()=>{try{return localStorage.getItem("mfd")=="1"}catch(e){return false}});
+ useEffect(()=>{document.documentElement.setAttribute("data-theme",dark?"dark":"light");try{localStorage.setItem("mfd",dark?"1":"0")}catch(e){}},[dark]);const d=useData(st=="app");
+ useEffect(()=>db.doc("config/biz").onSnapshot(x=>{CFG={...CFG,...(x.data()||{})};setCf(n=>n+1)},()=>{}),[]);
+ useEffect(()=>auth.onAuthStateChanged(async u=>{if(window.SETUP)return;if(!u){ME=null;let b=true;try{b=!(await db.doc("config/boot").get()).exists}catch(e){}return setSt(b?"setup":"login")}
+  const s=await db.collection("users").doc(u.uid).get();if(!s.exists||!s.data().active){alert("Account not found or suspended.");return auth.signOut()}
+  ME={id:u.uid,...s.data()};log("Login");if(ME.role=="admin"){if(window.PENDPIN!=null){const ok=await sha(window.PENDPIN)==ME.pinHash;window.PENDPIN=null;if(!ok){alert("Wrong PIN");return auth.signOut()}return setSt("app")}return setSt("pin")}
+  if(window.PENDPIN!=null){window.PENDPIN=null;alert("Admin PIN is for the Super Admin only.");return auth.signOut()}setSt("app")}),[]);
+ if(st=="load")return h`<div style="padding:40px;text-align:center;color:#6b7490">Loading…</div>`;if(st=="setup"||st=="login")return h`<${Auth} boot=${st=="setup"}/>`;if(st=="pin")return h`<${Pin} me=${ME} ok=${()=>setSt("app")}/>`;
+ const pages=ME.role=="admin"?RP.admin:(ME.pages||RP[ME.role]),pg=pages.includes(page)?page:pages[0],V={dash:Dash,pos:POS,sales:Sales,products:Products,stock:Stock,purchases:Purchases,customers:Customers,credits:Credits,suppliers:Suppliers,expenses:Expenses,reports:Reports,returns:Returns,alerts:Alerts,settings:Settings,staff:Staff,logs:Logs}[pg];
+ const al=alertsOf(d),nAl=al.low.length+al.exp.length,go=k=>{setMenu(false);if(k=="pos")return setPos(true);setPage(k);window.scrollTo(0,0)};
+ return h`<${React.Fragment}><div class="top"><button class="ham" onClick=${()=>setMenu(true)}>☰</button><b>${PAGES[pg]}</b><${Clock}/><button class="bell" onClick=${()=>go("alerts")}>🔔${nAl>0&&h`<i>${nAl}</i>`}</button><div class="av">${(ME.name||"?")[0].toUpperCase()}</div></div>
+ ${menu&&h`<div class="ov" onClick=${()=>setMenu(false)}></div>`}<div class=${"side"+(menu?" on":"")}><div class="brand">${CFG.logo?h`<img src=${CFG.logo}/>`:Mark()}<b>${CFG.name}</b></div><div class="biz"><span>${CFG.address||"Main Branch"}</span><button onClick=${()=>confirm("Exit this business and sign out?")&&auth.signOut()}>← Exit</button></div>
+ ${GR.map(([t,ks])=>{const v=ks.filter(k=>k=="@install"||pages.includes(k));return v.length?h`<div><h6>${t}</h6>${v.map(k=>k=="@install"?h`<button class="it ins" onClick=${inst}>📲 Install App</button>`:h`<button class=${"it"+(k==pg?" on":"")} onClick=${()=>go(k)}>${Ic(k)}${PAGES[k]}${k=="alerts"&&nAl>0&&h`<span class="bdg">${nAl}</span>`}</button>`)}</div>`:null})}
+ <div class="sf"><div class="av">${(ME.name||"?")[0].toUpperCase()}</div><div><b>${ME.name}</b><small>${ME.role}</small></div><div class="btns"><button onClick=${()=>setDark(!dark)}>${dark?"☀️ Light":"🌙 Dark"}</button><button onClick=${async()=>{await log("Logout");auth.signOut()}}>⎋ Out</button></div></div></div>
+ <main>${pg=="dash"&&h`<${RangeBar} rg=${rg} set=${setRg}/>`}<${V} d=${d} rg=${rg} go=${go}/></main>${pos&&h`<${POS} d=${d} x=${()=>setPos(false)}/>`}<//>`}
+ReactDOM.createRoot(document.getElementById("root")).render(h`<${EB}><${App}/><//>`);
+</script>
+</body>
+</html>
